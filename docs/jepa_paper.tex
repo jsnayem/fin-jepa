@@ -590,11 +590,11 @@ Several directions for future work are promising:
 
 We are committed to reproducible research. The status of each component is as follows:
 
-\textbf{Architecture ablation (Section~4.2):} Fully reproducible. The \texttt{compare\_arch.py} script trains 15 architecture variants on HS300 index constituent stocks using publicly available market data (Yahoo Finance). The script and model code are available in the accompanying code repository. Minor numerical variation may occur due to stochastic hardware and random seeds.
+\textbf{Architecture ablation (Section~4.2):} Fully reproducible. The \texttt{compare\_arch.py} script trains 15 architecture variants on HS300 index constituent stocks using publicly available market data (Yahoo Finance). The script and model code are available in the public code repository. Minor numerical variation may occur due to stochastic hardware and random seeds.
 
-\textbf{Full-scale training (Section~4.3):} Partially reproducible. Training on 6,230 stocks requires a proprietary feature dataset derived from daily OHLCV data. The training script (\texttt{submit\_hf\_job.py}), model definition (\texttt{model.py}), training configuration (hyperparameters, optimizer, scheduler), and evaluation pipeline are included in the repository. The trained model checkpoint and validation loss curve are preserved. External researchers with access to comparable stock data should be able to reproduce the qualitative findings.
+\textbf{Full-scale training (Section~4.3):} Partially reproducible. Training on 6,230 stocks requires a proprietary feature dataset derived from daily OHLCV data. The training scripts (\texttt{hf/train\_jepa.py}, \texttt{hf/submit\_hf.sh}) and model definition (\texttt{model.py}) are included in the repository. The trained model checkpoint and validation loss curve are preserved in the private companion repository. External researchers with access to comparable stock data should be able to reproduce the qualitative findings.
 
-\textbf{Downstream evaluation (Section~4.4):} Partially reproducible. The \texttt{experiment\_e.py} script is included in the repository and can be run with any trained JEPA checkpoint.
+\textbf{Downstream evaluation (Section~4.4):} Partially reproducible. The \texttt{experiment\_e.py} script is included in the public repository and can be run with any trained JEPA checkpoint.
 
 \textbf{Key reproducibility assets:}
 
@@ -603,18 +603,18 @@ We are committed to reproducible research. The status of each component is as fo
 \toprule
 Asset & Location & Status \\
 \midrule
-Model architecture (\texttt{model.py}) & Repository & $\checkmark$ Open \\
-Ablation training script (\texttt{compare\_arch.py}) & Repository & $\checkmark$ Open \\
-Full training script (\texttt{submit\_hf\_job.py}) & Repository & $\checkmark$ Open \\
-Downstream evaluation script (\texttt{experiment\_e.py}) & Repository & $\checkmark$ Open \\
-Ablation results (\texttt{output/arch\_*/meta.json}) & Repository & $\checkmark$ Open \\
-Full training checkpoint \& logs & Hugging Face & $\blacksquare$ Private \\
-Full training feature dataset & Hugging Face & $\blacksquare$ Private \\
+Model architecture (\texttt{model.py}) & \texttt{cedricwyh/fin-jepa} & $\checkmark$ Open \\
+Ablation training script (\texttt{compare\_arch.py}) & \texttt{cedricwyh/fin-jepa} & $\checkmark$ Open \\
+Full training scripts (\texttt{hf/train\_jepa.py}, \texttt{hf/submit\_hf.sh}) & \texttt{cedricwyh/fin-jepa} & $\checkmark$ Open \\
+Downstream evaluation script (\texttt{experiment\_e.py}) & \texttt{cedricwyh/fin-jepa} & $\checkmark$ Open \\
+Ablation results (\texttt{output/arch\_*/meta.json}) & \texttt{cedricwyh/fin-jepa} & $\checkmark$ Open \\
+Full training checkpoint \& logs & \texttt{cedricwyh/chan-jepa} (private) & $\blacksquare$ Private \\
+Full training feature dataset & Hugging Face (private) & $\blacksquare$ Private \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-Code is available at: \url{https://github.com/cedricwyh/fin-jepa} (upon request for the active development repository).
+Code is available at: \url{https://github.com/cedricwyh/fin-jepa}.
 
 % =============================================================================
 % Acknowledgments
