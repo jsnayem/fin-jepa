@@ -1,0 +1,11 @@
+{
+  "name": "v2_base_d64",
+  "embed_dim": 64,
+  "enc_layers": 3,
+  "pred_layers": 4,
+  "sigreg_proj": 128,
+  "params": 267328,
+  "epochs": 50,
+  "elapsed": 425.10426092147827,
+  "best_va_loss": 1.9591925902800127
+}

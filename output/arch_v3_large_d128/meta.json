@@ -1,0 +1,11 @@
+{
+  "name": "v3_large_d128",
+  "embed_dim": 128,
+  "enc_layers": 3,
+  "pred_layers": 4,
+  "sigreg_proj": 256,
+  "params": 944000,
+  "epochs": 50,
+  "elapsed": 902.4401087760925,
+  "best_va_loss": 2.0275031490759416
+}

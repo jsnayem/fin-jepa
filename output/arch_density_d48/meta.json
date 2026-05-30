@@ -1,0 +1,11 @@
+{
+  "name": "density_d48",
+  "encoder": "PriceEncoder_MLPDeep",
+  "predictor": "TransformerPredictor",
+  "embed_dim": 48,
+  "sigreg_proj": 64,
+  "params": 145104,
+  "epochs": 50,
+  "elapsed": 248.3370440006256,
+  "best_va_loss": 1.9174855947494507
+}

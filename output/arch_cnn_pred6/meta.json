@@ -1,0 +1,11 @@
+{
+  "name": "cnn_pred6",
+  "encoder": "PriceEncoder_CNN",
+  "predictor": "TransformerPredictor",
+  "embed_dim": 64,
+  "sigreg_proj": 128,
+  "params": 341184,
+  "epochs": 50,
+  "elapsed": 379.75201511383057,
+  "best_va_loss": 1.8954480452971025
+}

@@ -1,0 +1,11 @@
+{
+  "name": "pred_l3",
+  "encoder": "PriceEncoder_MLPDeep",
+  "predictor": "TransformerPredictor",
+  "embed_dim": 64,
+  "sigreg_proj": 128,
+  "params": 200832,
+  "epochs": 50,
+  "elapsed": 227.35014581680298,
+  "best_va_loss": 1.9732182351025669
+}

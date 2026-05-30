@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+.env.local
+data/raw/
+output/results/
+*.bak
+.DS_Store
+
+*.pt
+output/results/

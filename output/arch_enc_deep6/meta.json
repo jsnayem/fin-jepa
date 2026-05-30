@@ -1,0 +1,11 @@
+{
+  "name": "enc_deep6",
+  "encoder": "PriceEncoder_MLPDeep",
+  "predictor": "TransformerPredictor",
+  "embed_dim": 64,
+  "sigreg_proj": 128,
+  "params": 334336,
+  "epochs": 50,
+  "elapsed": 278.26618909835815,
+  "best_va_loss": 2.1678161946209995
+}

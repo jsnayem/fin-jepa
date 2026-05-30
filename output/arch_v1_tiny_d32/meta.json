@@ -1,0 +1,11 @@
+{
+  "name": "v1_tiny_d32",
+  "embed_dim": 32,
+  "enc_layers": 2,
+  "pred_layers": 2,
+  "sigreg_proj": 64,
+  "params": 63328,
+  "epochs": 50,
+  "elapsed": 253.04916882514954,
+  "best_va_loss": 1.9756632067940452
+}

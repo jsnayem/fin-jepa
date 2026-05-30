@@ -1,0 +1,11 @@
+{
+  "name": "mlp_pred",
+  "encoder": "PriceEncoder_MLPDeep",
+  "predictor": "MLPPredictor",
+  "embed_dim": 64,
+  "sigreg_proj": 128,
+  "params": 100544,
+  "epochs": 50,
+  "elapsed": 146.76698803901672,
+  "best_va_loss": 1.9191383556886152
+}
