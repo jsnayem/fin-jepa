@@ -48,7 +48,7 @@
 % Abstract
 % =============================================================================
 \begin{abstract}
-We present Fin-JEPA, the first application of the Joint-Embedding Predictive Architecture (JEPA) to financial time series. Fin-JEPA learns 64-dimensional latent representations of daily equity features through a lightweight 367K-parameter architecture comprising a PriceEncoder (MLP with GELU activations, LayerNorm) and a TransformerPredictor with 4-layer causal Transformer (\texttt{n\_heads=4}, \texttt{embed\_dim=64}). Representational collapse is prevented through Sketched Isotropic Gaussian Regularization (SIGReg, $\lambda=0.09$). On a large-scale dataset of 6,230 publicly traded equities spanning 2010--2026 (2.07M training samples), the training loss converges from 1.369 to 0.706 over 50 epochs with no collapse (\texttt{stdZ}=1.35, \texttt{eff\_rank}=37.8). The learned latent predictions outperform an identity baseline by 10.1\% (\texttt{Z\_pred} MSE 0.2922 vs.\ 0.3249), confirming that daily financial time series contain learnable temporal structure. In downstream evaluation, we analyze prediction error (VoE) as a potential trading signal across 300 stocks (393K windows), finding weak-to-negligible signal (AUC$\approx$0.49, Spearman $r\approx$0). We outline future work for PELT-based regime detection and multi-horizon training.
+We present Fin-JEPA, the first application of the Joint-Embedding Predictive Architecture (JEPA) to financial time series. Fin-JEPA learns 64-dimensional latent representations of daily equity features through a lightweight 367K-parameter architecture comprising a PriceEncoder (MLP with GELU activations, LayerNorm) and a TransformerPredictor with 4-layer causal Transformer (\texttt{n\_heads=4}, \texttt{embed\_dim=64}). Representational collapse is prevented through Sketched Isotropic Gaussian Regularization (SIGReg, $\lambda=0.1$). On a large-scale dataset of 6,230 publicly traded equities spanning 2010--2026 (2.07M training samples), the training loss converges from 1.369 to 0.706 over 50 epochs with no collapse (\texttt{stdZ}=1.35, \texttt{eff\_rank}=37.8). The learned latent predictions outperform an identity baseline by 10.1\% (\texttt{Z\_pred} MSE 0.2922 vs.\ 0.3249), confirming that daily financial time series contain learnable temporal structure. In downstream evaluation, we analyze prediction error (VoE) as a potential trading signal across 300 stocks (393K windows), finding weak-to-negligible signal (AUC$\approx$0.49, Spearman $r\approx$0). We outline future work for PELT-based regime detection and multi-horizon training.
 \end{abstract}
 
 % =============================================================================
@@ -144,7 +144,7 @@ The predictor $g_\phi$ operates entirely in latent space and is a causal Transfo
 The Transformer predictor is a critical design choice: unlike the MLP predictors used in I-JEPA/TS-JEPA, the causal attention mechanism enables the model to learn temporal dependencies across the context window, which is essential for financial time series where sequential structure matters.
 
 \textbf{SIGReg --- Sketched Isotropic Gaussian Regularization.}
-To prevent representational collapse, we apply SIGReg~\citep{balestriero2025lejepa}, which projects latent vectors onto random directions and matches their distribution to a standard Gaussian. The regularization randomly projects the $D$-dimensional latents onto 512 random directions using a normalized random matrix, then computes a kernel-based statistic comparing the empirical characteristic function to that of $\mathcal{N}(0,1)$. The SIGReg loss is added to the prediction loss with weight $\lambda = 0.09$.
+To prevent representational collapse, we apply SIGReg~\citep{balestriero2025lejepa}, which projects latent vectors onto random directions and matches their distribution to a standard Gaussian. The regularization randomly projects the $D$-dimensional latents onto 128 random directions using a normalized random matrix, then computes a kernel-based statistic comparing the empirical characteristic function to that of $\mathcal{N}(0,1)$. The SIGReg loss is added to the prediction loss with weight $\lambda = 0.1$.
 
 \textbf{Parameter count.}
 With $d=22$, $k=64$, 4-layer Transformer predictor (4 heads), and 3-layer encoder MLP, the total parameter count is approximately 367K for the best variant (v4\_deep\_d64). The model is lightweight enough for single-GPU training and real-time inference on a per-stock basis.
@@ -171,7 +171,7 @@ To prevent the latent representations from collapsing to a low-dimensional subsp
 \label{eq:reg_loss}
 \end{equation}
 
-which is computed by projecting latents onto random directions and matching the empirical characteristic function to that of a standard Gaussian~\citep{balestriero2025lejepa}. The number of random projections is set to 512.
+which is computed by projecting latents onto random directions and matching the empirical characteristic function to that of a standard Gaussian~\citep{balestriero2025lejepa}. The number of random projections is set to 128.
 
 \textbf{Total objective.}
 The combined loss is:
@@ -181,7 +181,7 @@ The combined loss is:
 \label{eq:total_loss}
 \end{equation}
 
-with $\lambda = 0.09$. This weighting ensures that prediction fidelity dominates the optimization while the regularization term provides a soft constraint against collapse.
+with $\lambda = 0.1$. This weighting ensures that prediction fidelity dominates the optimization while the regularization term provides a soft constraint against collapse.
 
 \subsection{Collapse Prevention}
 
@@ -231,7 +231,7 @@ For architecture ablation experiments, we use a subset of HS300 (CSI 300) index 
 
 \subsection{Architecture Ablation Studies}
 
-We conduct comprehensive ablation experiments to identify the optimal architecture configuration. All ablations are trained for 50 epochs on the HS300 subset, using the same training protocol. The primary metric is \textbf{best validation loss}.
+We conduct comprehensive ablation experiments to identify the optimal architecture configuration. All ablations are trained for 50 epochs on the HS300 subset using 11 technical features (a subset of the 22-dimensional full feature set), with a context window of 60 steps and prediction horizon of 5 steps. The primary metric is \textbf{best validation loss}.
 
 \begin{figure}[t]
   \centering
@@ -392,7 +392,7 @@ Training time & 213.7 min ($\sim$3.5 hours) \\
 Optimizer & AdamW (lr=5e-4, weight\_decay=1e-5) \\
 Batch size & 512 \\
 Learning rate schedule & Linear warmup (1 epoch) + cosine decay \\
-SIGReg $\lambda$ & 0.09 \\
+SIGReg $\lambda$ & 0.1 \\
 Context / Target & 30 / 10 time steps \\
 Dataset & 2,065,153 train / 192,318 val / 242,068 test \\
 \bottomrule
@@ -559,7 +559,7 @@ The model's efficiency (367K parameters) is notable. Fin-JEPA can be trained on 
 % =============================================================================
 \section{Conclusion \& Future Work}
 
-We have presented Fin-JEPA, the first Joint-Embedding Predictive Architecture applied to financial time series. Fin-JEPA learns 64-dimensional latent representations through a PriceEncoder (MLP with GELU activations) and a TransformerPredictor (4-layer causal Transformer), regularized by SIGReg ($\lambda=0.09$). On a large-scale dataset of 6,230 publicly traded equities (2.07M training samples), the model converges to training loss 0.706 with no representational collapse (eff\_rank=37.8, stdZ=1.35). Latent prediction outperforms an identity baseline by 10.1\% (Z\_pred MSE 0.2922 vs.\ 0.3249), confirming learnable temporal dynamics in daily equity data.
+We have presented Fin-JEPA, the first Joint-Embedding Predictive Architecture applied to financial time series. Fin-JEPA learns 64-dimensional latent representations through a PriceEncoder (MLP with GELU activations) and a TransformerPredictor (4-layer causal Transformer), regularized by SIGReg ($\lambda=0.1$). On a large-scale dataset of 6,230 publicly traded equities (2.07M training samples), the model converges to training loss 0.706 with no representational collapse (eff\_rank=37.8, stdZ=1.35). Latent prediction outperforms an identity baseline by 10.1\% (Z\_pred MSE 0.2922 vs.\ 0.3249), confirming learnable temporal dynamics in daily equity data.
 
 Comprehensive architecture ablation (15 variants) establishes:
 \begin{itemize}[nosep]
