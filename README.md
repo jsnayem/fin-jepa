@@ -1,6 +1,6 @@
 # Fin-JEPA
 
-[![arXiv](https://img.shields.io/badge/arXiv-preprint-red)](https://arxiv.org/abs/)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20470971.svg)](https://doi.org/10.5281/zenodo.20470971)
 
 **Fin-JEPA: Joint-Embedding Predictive Representation Learning for Financial Time Series**
 
