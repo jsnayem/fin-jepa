@@ -297,7 +297,7 @@ def main():
     # ──────────────────────────────────────────
     # Predict next trading day (first after last known day in data)
     # ──────────────────────────────────────────
-    print(f"\n[7] Predicting next trading day (after {last_date.date()})...", flush=True)
+    print(f"\n[7] Predicting next trading day (after {pd.Timestamp(last_date).date()})...", flush=True)
     c_ctx = torch.FloatTensor(last_ctx).unsqueeze(0).to(DEVICE)
     with torch.no_grad():
         next_pred_norm = model(c_ctx)[:, -1, :].cpu().numpy()
@@ -322,7 +322,7 @@ def main():
         'n_samples': len(ctx_arr),
         'n_train': len(trainset),
         'n_val': len(valset),
-        'last_date': str(last_date.date()),
+        'last_date': str(pd.Timestamp(last_date).date()),
         'next_day_prediction': next_pred_raw[0].tolist(),
         'context_len': CTX_LEN,
         'target_len': 1,
