@@ -157,10 +157,10 @@ def split_data(df, ctx_arr, tgt_arr):
     train_ctx, train_tgt = ctx_arr[:train_n], tgt_arr[:train_n]
     val_ctx,   val_tgt   = ctx_arr[train_n:], tgt_arr[train_n:]
 
-    print(f"  Train: {len(train_ctx):,}  Val: {len(val_ctx):,} (chronological, ~{cutoff_date.date()})", flush=True)
+    print(f"  Train: {len(train_ctx):,}  Val: {len(val_ctx):,} (chronological, ~{pd.Timestamp(cutoff_date).date()})", flush=True)
     return (SingleDayDataset(train_ctx, train_tgt),
             SingleDayDataset(val_ctx, val_tgt),
-            ctx_arr[-1], dates.iloc[-1])
+            ctx_arr[-1], dates[-1])
 
 
 # ──────────────────────────────────────────────
