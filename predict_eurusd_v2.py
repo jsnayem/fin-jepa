@@ -109,7 +109,7 @@ def main():
 
     vals = df[ALL_COLS].values.astype(np.float32)
     normalized = (vals - all_mean) / all_std
-    last_ctx_norm = normalized[-60:]
+    last_ctx_norm = normalized[-61:-1]
     last_close = vals[-1, 3]
     last_date = df['date'].iloc[-1]
     print(f"  Last close: {last_close:.5f} on {last_date.date()}")

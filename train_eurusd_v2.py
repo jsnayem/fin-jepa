@@ -123,7 +123,6 @@ def normalize_and_sequence(df):
     means = np.nanmean(vals, axis=0)
     stds  = np.nanstd(vals, axis=0) + 1e-8
 
-    normalized = vals
     ohlc_means = means[:4].copy()
     ohlc_stds  = stds[:4].copy()
 
@@ -300,7 +299,7 @@ def main():
     print(f"\n[7] Predicting next trading day (after {pd.Timestamp(last_date).date()})...", flush=True)
     c_ctx = torch.FloatTensor(last_ctx).unsqueeze(0).to(DEVICE)
     with torch.no_grad():
-        next_pred_norm = model(c_ctx)[:, -1, :].cpu().numpy()
+        next_pred_norm = model.predict_next(c_ctx).cpu().numpy()
     next_pred_raw = next_pred_norm * ohlc_std + ohlc_mean
     print(f"  Predicted OHLC: O={next_pred_raw[0,0]:.5f} H={next_pred_raw[0,1]:.5f} "
           f"L={next_pred_raw[0,2]:.5f} C={next_pred_raw[0,3]:.5f}")
