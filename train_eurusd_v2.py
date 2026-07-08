@@ -160,7 +160,8 @@ def split_data(df, ctx_arr, tgt_arr):
     print(f"  Train: {len(train_ctx):,}  Val: {len(val_ctx):,} (chronological, ~{pd.Timestamp(cutoff_date).date()})", flush=True)
     return (SingleDayDataset(train_ctx, train_tgt),
             SingleDayDataset(val_ctx, val_tgt),
-            ctx_arr[-1], dates[-1])
+            ctx_arr[-1], dates[-1],
+            val_ctx, val_tgt)
 
 
 # ──────────────────────────────────────────────
@@ -221,7 +222,7 @@ def main():
     df_raw  = fetch_eurusd()
     df_feat = build_features(df_raw)
     df, ctx_arr, tgt_arr, all_mean, all_std, ohlc_mean, ohlc_std = normalize_and_sequence(df_feat)
-    trainset, valset, last_ctx, last_date = split_data(df, ctx_arr, tgt_arr)
+    trainset, valset, last_ctx, last_date, val_ctx, val_tgt = split_data(df, ctx_arr, tgt_arr)
 
     train_loader = DataLoader(trainset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
     val_loader   = DataLoader(valset,   batch_size=BATCH_SIZE, shuffle=False, num_workers=2)
