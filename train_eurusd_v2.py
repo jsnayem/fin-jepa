@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Fin-JEPA v2 — Direct OHLC autoregressive predictor for EUR/USD.
-Predicts next-day OHLC directly, minimizing MSE on the 4 price features.
+Fin-JEPA v2 — Single-day OHLC predictor for EUR/USD.
+Predicts next-trading-day OHLC. Target: 1 day, context: 60 days.
 """
 
 import json, time, warnings
@@ -23,12 +23,16 @@ ALL_COLS  = ['open', 'high', 'low', 'close', 'volume', 'returns',
              'volatility_20', 'volatility_5', 'range_pct',
              'close_ma_5', 'close_ma_20', 'high_low_ratio']
 
+CTX_LEN = 60
+EPOCHS = 80
+BATCH_SIZE = 256
+
 # ──────────────────────────────────────────────
-# Model: Causal Transformer → direct OHLC
+# Model
 # ──────────────────────────────────────────────
 
 class OHLCTransformer(nn.Module):
-    def __init__(self, n_features, d_model=64, n_layers=3, n_heads=4, max_len=120):
+    def __init__(self, n_features, d_model=64, n_layers=4, n_heads=4, max_len=120):
         super().__init__()
         self.input_proj = nn.Linear(n_features, d_model)
         self.pos_embed = nn.Parameter(torch.randn(1, max_len, d_model) * 0.02)
@@ -43,7 +47,7 @@ class OHLCTransformer(nn.Module):
         self.norm = nn.LayerNorm(d_model)
         self.head = nn.Sequential(
             nn.Linear(d_model, d_model), nn.GELU(),
-            nn.Linear(d_model, 4),  # open, high, low, close
+            nn.Linear(d_model, 4),
         )
 
     def forward(self, x):
@@ -55,82 +59,32 @@ class OHLCTransformer(nn.Module):
         for block in self.blocks:
             x = block(x, src_mask=mask, is_causal=False)
         x = self.norm(x)
-        preds = self.head(x)  # (B, T, 4)
-        return preds
+        return self.head(x)
 
-    def autoregressive(self, ctx, n_steps, threshold=None):
-        """Roll out n_steps OHLC predictions, enforcing high>=close etc."""
-        current = ctx  # (1, T_ctx, F)
-        preds_all = []
-        for _ in range(n_steps):
-            if current.shape[1] > 100:
-                current = current[:, -100:]
-            out = self.forward(current)  # (1, T, 4)
-            ohlc_next = out[:, -1:, :]   # (1, 1, 4)
-
-            # Enforce: high >= max(open, close) and low <= min(open, close)
-            ohlc_next = self._ohlc_constraint(ohlc_next)
-
-            preds_all.append(ohlc_next.squeeze(1).detach())
-
-            # Build next step features from predicted OHLC
-            next_feat = self._build_features(ohlc_next.squeeze(1), current[:, -1, :])
-            current = torch.cat([current, next_feat.unsqueeze(1)], dim=1)
-
-        return torch.stack(preds_all, dim=0)  # (n_steps, 4)
-
-    @staticmethod
-    def _ohlc_constraint(ohlc):
-        """Enforce high >= max(open,close) and low <= min(open,close)."""
-        o, h, l, c = ohlc[..., 0:1], ohlc[..., 1:2], ohlc[..., 2:3], ohlc[..., 3:4]
-        h = torch.maximum(h, torch.maximum(o, c))
-        l = torch.minimum(l, torch.minimum(o, c))
-        return torch.cat([o, h, l, c], dim=-1)
-
-    @staticmethod
-    def _build_features(ohlc, prev_feat):
-        """Build next-step feature vector from predicted OHLC + previous context."""
-        o, h, l, c = ohlc[..., 0:1], ohlc[..., 1:2], ohlc[..., 2:3], ohlc[..., 3:4]
-        prev_c = prev_feat[..., 3:4]  # previous close
-        returns = (c - prev_c) / (prev_c.abs() + 1e-8)
-
-        # Use previous features for rolling stats as approximation
-        vol = prev_feat[..., 4:5]  # carry volume
-        rp = (h - l) / (c.abs() + 1e-8)  # new range_pct
-
-        # Rolling stats: decay previous values
-        prev_vol20 = prev_feat[..., 6:7]
-        prev_vol5 = prev_feat[..., 7:8]
-        prev_cma5 = prev_feat[..., 9:10]
-        prev_cma20 = prev_feat[..., 10:11]
-        prev_hlr = prev_feat[..., 11:12]
-
-        new_vol20 = 0.95 * prev_vol20 + 0.05 * returns.abs()
-        new_vol5  = 0.80 * prev_vol5  + 0.20 * returns.abs()
-        new_cma5  = 0.80 * prev_cma5  + 0.20 * (c / (prev_c.abs() + 1e-8))
-        new_cma20 = 0.95 * prev_cma20 + 0.05 * (c / (prev_c.abs() + 1e-8))
-        new_hlr   = 0.95 * prev_hlr   + 0.05 * (h / (l.abs() + 1e-8))
-
-        return torch.cat([o, h, l, c, vol, returns, new_vol20, new_vol5,
-                          rp, new_cma5, new_cma20, new_hlr], dim=-1)
+    def predict_next(self, ctx):
+        with torch.no_grad():
+            out = self.forward(ctx)
+            ohlc = out[:, -1, :]
+            o, h, l, c = ohlc[:, 0:1], ohlc[:, 1:2], ohlc[:, 2:3], ohlc[:, 3:4]
+            h = torch.maximum(h, torch.maximum(o, c))
+            l = torch.minimum(l, torch.minimum(o, c))
+            return torch.cat([o, h, l, c], dim=-1)
 
 
 # ──────────────────────────────────────────────
 # Data
 # ──────────────────────────────────────────────
 
-class OHLCSequenceDataset(Dataset):
-    def __init__(self, sequences):
-        self.data = sequences
+class SingleDayDataset(Dataset):
+    def __init__(self, seqs_ctx, seqs_tgt):
+        self.ctx = seqs_ctx
+        self.tgt = seqs_tgt
 
     def __len__(self):
-        return len(self.data)
+        return len(self.ctx)
 
     def __getitem__(self, idx):
-        seq = self.data[idx]  # (65, F)
-        ctx = torch.FloatTensor(seq[:60])
-        tgt = torch.FloatTensor(seq[60:65, :4])  # only OHLC
-        return {'ctx': ctx, 'tgt': tgt, 'ctx_ohlc': ctx[:, :4]}
+        return torch.FloatTensor(self.ctx[idx]), torch.FloatTensor(self.tgt[idx])
 
 
 def fetch_eurusd():
@@ -169,38 +123,44 @@ def normalize_and_sequence(df):
     means = np.nanmean(vals, axis=0)
     stds  = np.nanstd(vals, axis=0) + 1e-8
 
-    normalized = (vals - means) / stds
-    df_norm = df.copy()
-    for i, c in enumerate(ALL_COLS):
-        df_norm[c] = normalized[:, i]
-
+    normalized = vals
     ohlc_means = means[:4].copy()
     ohlc_stds  = stds[:4].copy()
 
     print(f"  OHLC means: {dict(zip(OHLC_COLS, ohlc_means.round(5)))}", flush=True)
     print(f"  OHLC stds:  {dict(zip(OHLC_COLS, ohlc_stds.round(5)))}", flush=True)
 
-    # Context=60, target=5, stride=1 for maximum overlap (more training signal)
-    seqs = []
-    v = df_norm[ALL_COLS].values.astype(np.float32)
-    for i in range(0, max(1, len(v) - 65 + 1), 1):
-        chunk = v[i:i+65]
-        if len(chunk) == 65 and not np.isnan(chunk).any():
-            seqs.append(chunk)
+    # Context=60, target=1 day, stride=1
+    ctx_list, tgt_list = [], []
+    v = (vals - means) / stds
+    for i in range(len(v) - CTX_LEN):
+        ctx = v[i:i + CTX_LEN]
+        tgt = v[i + CTX_LEN, :4]
+        if not np.isnan(ctx).any() and not np.isnan(tgt).any():
+            ctx_list.append(ctx)
+            tgt_list.append(tgt)
 
-    seq = np.stack(seqs).astype(np.float32)
-    print(f"  {len(seq):,} sequences × {seq.shape[1]} steps × {seq.shape[2]} features", flush=True)
-    return seq, means, stds, ohlc_means, ohlc_stds
+    ctx_arr = np.stack(ctx_list).astype(np.float32)
+    tgt_arr = np.stack(tgt_list).astype(np.float32)
+    print(f"  {len(ctx_arr):,} samples × ({CTX_LEN} ctx + 1 tgt) × {v.shape[1]} feats", flush=True)
+    return df, ctx_arr, tgt_arr, means, stds, ohlc_means, ohlc_stds
 
 
-def split_data(sequences):
-    n = len(sequences)
-    split_idx = int(n * 0.85)
-    train_seq = sequences[:split_idx]
-    val_seq   = sequences[split_idx:]
-    last_ctx  = sequences[-1, :60]
-    print(f"  Train: {len(train_seq):,}  Val: {len(val_seq):,}", flush=True)
-    return OHLCSequenceDataset(train_seq), OHLCSequenceDataset(val_seq), last_ctx
+def split_data(df, ctx_arr, tgt_arr):
+    """Chronological split: last 20% of time range = validation. No data leakage."""
+    dates = df['date'].values
+    cutoff_date = dates[int(len(dates) * 0.8)]
+    cutoff_idx = CTX_LEN + int(len(ctx_arr) * 0.8)
+
+    # Use strictly non-overlapping chronological splits
+    train_n = int(len(ctx_arr) * 0.8)
+    train_ctx, train_tgt = ctx_arr[:train_n], tgt_arr[:train_n]
+    val_ctx,   val_tgt   = ctx_arr[train_n:], tgt_arr[train_n:]
+
+    print(f"  Train: {len(train_ctx):,}  Val: {len(val_ctx):,} (chronological, ~{cutoff_date.date()})", flush=True)
+    return (SingleDayDataset(train_ctx, train_tgt),
+            SingleDayDataset(val_ctx, val_tgt),
+            ctx_arr[-1], dates.iloc[-1])
 
 
 # ──────────────────────────────────────────────
@@ -209,17 +169,17 @@ def split_data(sequences):
 
 def train_epoch(model, loader, opt, scaler):
     model.train()
-    total_loss, total_mae = 0, 0
+    total_loss, total_mae = 0.0, 0.0
     n = 0
-    for batch in loader:
-        ctx = batch['ctx'].to(DEVICE)
-        tgt = batch['tgt'].to(DEVICE)  # (B, 5, 4)
+    for ctx, tgt in loader:
+        ctx = ctx.to(DEVICE)
+        tgt = tgt.to(DEVICE)
 
         opt.zero_grad()
         with torch.amp.autocast(device_type=DEVICE, enabled=DEVICE == "cuda"):
-            preds = model(ctx)  # (B, 60, 4)
-            pred_ohlc = preds[:, -5:, :]  # last 5 predictions
-            loss = nn.functional.mse_loss(pred_ohlc, tgt)
+            preds = model(ctx)
+            pred_next = preds[:, -1, :]
+            loss = nn.functional.mse_loss(pred_next, tgt)
 
         scaler.scale(loss).backward()
         scaler.unscale_(opt)
@@ -229,44 +189,42 @@ def train_epoch(model, loader, opt, scaler):
 
         total_loss += loss.item()
         with torch.no_grad():
-            total_mae += (pred_ohlc - tgt).abs().mean().item()
+            total_mae += (pred_next - tgt).abs().mean().item()
         n += 1
-
     return total_loss / n, total_mae / n
 
 
 @torch.no_grad()
 def eval_epoch(model, loader):
     model.eval()
-    total_loss, total_mae = 0, 0
+    total_loss, total_mae = 0.0, 0.0
     n = 0
-    for batch in loader:
-        ctx = batch['ctx'].to(DEVICE)
-        tgt = batch['tgt'].to(DEVICE)
+    for ctx, tgt in loader:
+        ctx = ctx.to(DEVICE)
+        tgt = tgt.to(DEVICE)
         preds = model(ctx)
-        pred_ohlc = preds[:, -5:, :]
-        loss = nn.functional.mse_loss(pred_ohlc, tgt)
+        pred_next = preds[:, -1, :]
+        loss = nn.functional.mse_loss(pred_next, tgt)
         total_loss += loss.item()
-        total_mae += (pred_ohlc - tgt).abs().mean().item()
+        total_mae += (pred_next - tgt).abs().mean().item()
         n += 1
     return total_loss / n, total_mae / n
 
 
 def main():
     print("=" * 60, flush=True)
-    print("EUR/USD OHLC Predictor — Training (v2)")
+    print("EUR/USD Single-Day OHLC Predictor — Training (v2)")
     print(f"Device: {DEVICE}")
     print("=" * 60, flush=True)
 
     # Data
     df_raw  = fetch_eurusd()
     df_feat = build_features(df_raw)
-    seqs, means, stds, ohlc_means, ohlc_stds = normalize_and_sequence(df_feat)
-    trainset, valset, last_ctx = split_data(seqs)
+    df, ctx_arr, tgt_arr, all_mean, all_std, ohlc_mean, ohlc_std = normalize_and_sequence(df_feat)
+    trainset, valset, last_ctx, last_date = split_data(df, ctx_arr, tgt_arr)
 
-    BS = 256
-    train_loader = DataLoader(trainset, batch_size=BS, shuffle=True,  num_workers=0)
-    val_loader   = DataLoader(valset,   batch_size=BS, shuffle=False, num_workers=0)
+    train_loader = DataLoader(trainset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
+    val_loader   = DataLoader(valset,   batch_size=BATCH_SIZE, shuffle=False, num_workers=2)
 
     # Model
     n_features = len(ALL_COLS)
@@ -274,18 +232,20 @@ def main():
     n_params = sum(p.numel() for p in model.parameters())
     print(f"\n[4] Model: {n_features} features, 64d, 4 layers, {n_params:,} params", flush=True)
 
-    opt = torch.optim.AdamW(model.parameters(), lr=5e-4, weight_decay=1e-4)
-    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=200)
+    opt = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
+    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=EPOCHS)
     scaler = torch.amp.GradScaler(device=DEVICE, enabled=DEVICE == "cuda")
 
-    print(f"\n[5] Training 200 epochs...", flush=True)
+    print(f"\n[5] Training {EPOCHS} epochs (single-day target)...", flush=True)
     best_val = float('inf')
     t0 = time.time()
+    history = []
 
-    for epoch in range(200):
+    for epoch in range(EPOCHS):
         tr_loss, tr_mae = train_epoch(model, train_loader, opt, scaler)
         va_loss, va_mae = eval_epoch(model, val_loader)
         sched.step()
+        history.append({'epoch': epoch, 'tr_loss': tr_loss, 'tr_mae': tr_mae, 'va_loss': va_loss, 'va_mae': va_mae})
 
         if va_loss < best_val:
             best_val = va_loss
@@ -297,7 +257,7 @@ def main():
                 'val_mae': va_mae,
             }, OUTPUT_DIR / "best.pt")
 
-        if epoch % 20 == 0 or epoch == 199:
+        if epoch % 5 == 0 or epoch == EPOCHS - 1:
             elapsed = time.time() - t0
             print(f"  epoch {epoch:3d} | tr_loss={tr_loss:.6f} tr_mae={tr_mae:.5f} | "
                   f"va_loss={va_loss:.6f} va_mae={va_mae:.5f} | {elapsed:.0f}s", flush=True)
@@ -305,45 +265,77 @@ def main():
     elapsed = time.time() - t0
     print(f"\n  Done in {elapsed/60:.1f}min | Best val loss: {best_val:.6f}", flush=True)
 
-    # Evaluate on held-out data: predict last 5 days, denormalize, compute actual error
+    # ──────────────────────────────────────────
+    # Holdout evaluation — predict last 10 val days and show accuracy
+    # ──────────────────────────────────────────
     ckpt = torch.load(OUTPUT_DIR / "best.pt", map_location=DEVICE)
     model.load_state_dict(ckpt['model_state_dict'])
     model.eval()
 
-    # Take a fresh holdout window from the very end
-    holdout_ctx = torch.FloatTensor(seqs[-2:, :60]).to(DEVICE)  # last 2 sequences for a sanity check
+    h_ctx = torch.FloatTensor(val_ctx[-10:]).to(DEVICE)
+    h_tgt = torch.FloatTensor(val_tgt[-10:]).to(DEVICE)
     with torch.no_grad():
-        holdout_preds_norm = model(holdout_ctx)[:, -5:, :].cpu().numpy()
-    holdout_preds = holdout_preds_norm * ohlc_stds[:4] + ohlc_means[:4]
+        h_preds = model(h_ctx)[:, -1, :].cpu().numpy()
+    h_actual = h_tgt.cpu().numpy()
+    h_preds_raw = h_preds * ohlc_std + ohlc_mean
+    h_actual_raw = h_actual * ohlc_std + ohlc_mean
 
-    print(f"\n[6] Quick holdout sanity check (last prediction):")
-    print(f"  Predicted OHLC (denormed): {dict(zip(OHLC_COLS, holdout_preds[-1, -1].round(5)))}")
+    val_start = len(ctx_arr) - 10
+    val_dates = df['date'].values[CTX_LEN + val_start:CTX_LEN + val_start + 10]
 
-    # Save all artifacts
+    print(f"\n[6] Holdout — last 10 validation days")
+    print(f"  {'Date':<12s} {'Pred Close':>10s} {'Actual':>10s} {'Err':>10s}")
+    for i in range(10):
+        d = pd.Timestamp(val_dates[i]).date()
+        pe = h_preds_raw[i, 3]
+        ae = h_actual_raw[i, 3]
+        print(f"  {str(d):<12s} {pe:>10.5f} {ae:>10.5f} {abs(pe-ae):>10.5f}")
+    print(f"  Close MAE: {np.abs(h_preds_raw[:, 3] - h_actual_raw[:, 3]).mean():.5f}")
+    print(f"  OHLC MAE:  {np.abs(h_preds_raw - h_actual_raw).mean():.5f}")
+
+    # ──────────────────────────────────────────
+    # Predict next trading day (first after last known day in data)
+    # ──────────────────────────────────────────
+    print(f"\n[7] Predicting next trading day (after {last_date.date()})...", flush=True)
+    c_ctx = torch.FloatTensor(last_ctx).unsqueeze(0).to(DEVICE)
+    with torch.no_grad():
+        next_pred_norm = model(c_ctx)[:, -1, :].cpu().numpy()
+    next_pred_raw = next_pred_norm * ohlc_std + ohlc_mean
+    print(f"  Predicted OHLC: O={next_pred_raw[0,0]:.5f} H={next_pred_raw[0,1]:.5f} "
+          f"L={next_pred_raw[0,2]:.5f} C={next_pred_raw[0,3]:.5f}")
+
+    # ──────────────────────────────────────────
+    # Save artifacts
+    # ──────────────────────────────────────────
     np.save(OUTPUT_DIR / "last_context.npy", last_ctx)
+    np.save(OUTPUT_DIR / "next_day_prediction.npy", next_pred_raw[0])
     meta = {
-        'description': 'Direct OHLC autoregressive predictor for EUR/USD',
+        'description': 'Single-day OHLC predictor for EUR/USD',
         'symbol': 'EURUSD=X',
         'features': ALL_COLS,
         'n_features': n_features,
-        'ohlc_mean': ohlc_means.tolist(),
-        'ohlc_std':  ohlc_stds.tolist(),
-        'all_mean':  means.tolist(),
-        'all_std':   stds.tolist(),
-        'n_sequences': len(seqs),
+        'ohlc_mean': ohlc_mean.tolist(),
+        'ohlc_std': ohlc_std.tolist(),
+        'all_mean': all_mean.tolist(),
+        'all_std': all_std.tolist(),
+        'n_samples': len(ctx_arr),
         'n_train': len(trainset),
-        'n_val':   len(valset),
-        'context_len': 60,
-        'target_len': 5,
+        'n_val': len(valset),
+        'last_date': str(last_date.date()),
+        'next_day_prediction': next_pred_raw[0].tolist(),
+        'context_len': CTX_LEN,
+        'target_len': 1,
         'best_val_loss': float(best_val),
-        'best_val_mae':  float(va_mae),
+        'best_val_mae': float(va_mae),
         'device': DEVICE,
         'params': n_params,
+        'history': history,
     }
     json.dump(meta, open(OUTPUT_DIR / "meta.json", "w"), indent=2)
 
     print(f"\n✅ Training complete. Checkpoint: {OUTPUT_DIR / 'best.pt'}")
     print(f"   val_mse={best_val:.6f}  val_mae={va_mae:.5f}")
+    print(f"   Next-day close prediction: {next_pred_raw[0,3]:.5f}")
 
 
 if __name__ == "__main__":
