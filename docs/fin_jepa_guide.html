@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fin-JEPA: Comprehensive Guide</title>
+<style>
+  :root {
+    --bg: #fafafa;
+    --card-bg: #ffffff;
+    --text: #1a1a1a;
+    --text-secondary: #555;
+    --border: #e0e0e0;
+    --accent: #1e3a5f;
+    --accent-light: #e8f0fe;
+    --code-bg: #f4f4f5;
+    --code-text: #d63384;
+    --heading-color: #0d2b4e;
+    --table-stripe: #f8f9fb;
+    --table-header: #1e3a5f;
+    --tag-bg: #e8f0fe;
+    --tag-text: #1e3a5f;
+    --good: #16a34a;
+    --warn: #ca8a04;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem 1.5rem;
+  }
+  .container { max-width: 960px; margin: 0 auto; }
+
+  header {
+    text-align: center;
+    margin-bottom: 3rem;
+    padding-bottom: 2rem;
+    border-bottom: 3px solid var(--accent);
+  }
+  header h1 {
+    font-size: 2.4rem;
+    color: var(--heading-color);
+    margin-bottom: 0.4rem;
+    letter-spacing: -0.5px;
+  }
+  header .subtitle {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+  }
+  header .badges {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .badge {
+    background: var(--tag-bg);
+    color: var(--tag-text);
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.8rem 2rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .card h2 {
+    font-size: 1.5rem;
+    color: var(--heading-color);
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--border);
+  }
+  .card h3 {
+    font-size: 1.15rem;
+    color: var(--heading-color);
+    margin: 1.4rem 0 0.6rem;
+  }
+
+  p { margin-bottom: 0.9rem; }
+  ul, ol { margin: 0.6rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.35rem; }
+
+  code {
+    background: var(--code-bg);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.88em;
+    color: var(--code-text);
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+  pre {
+    background: #1e1e2e;
+    color: #cdd6f4;
+    padding: 1.2rem 1.4rem;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    line-height: 1.55;
+    margin: 0.8rem 0 1.2rem;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+  pre .kw { color: #cba6f7; }
+  pre .str { color: #a6e3a1; }
+  pre .cmt { color: #6c7086; font-style: italic; }
+  pre .num { color: #fab387; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0 1.4rem;
+    font-size: 0.9rem;
+  }
+  thead th {
+    background: var(--table-header);
+    color: #fff;
+    padding: 0.6rem 0.8rem;
+    text-align: left;
+    font-weight: 600;
+  }
+  tbody td {
+    padding: 0.55rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody tr:nth-child(even) { background: var(--table-stripe); }
+
+  .flow-steps {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin: 1rem 0;
+  }
+  .flow-step {
+    flex: 1;
+    min-width: 120px;
+    background: var(--accent-light);
+    border-radius: 8px;
+    padding: 0.8rem;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.85rem;
+  }
+  .flow-step .step-num {
+    display: block;
+    font-size: 1.4rem;
+    color: var(--accent);
+    margin-bottom: 0.2rem;
+  }
+
+  .arch-diagram {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    margin: 1.2rem 0;
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+  .arch-box {
+    background: var(--accent-light);
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    text-align: center;
+  }
+  .arch-arrow { font-size: 1.4rem; color: var(--accent); }
+
+  .note {
+    background: #fef9c3;
+    border-left: 4px solid var(--warn);
+    padding: 0.8rem 1rem;
+    margin: 1rem 0;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.9rem;
+  }
+  .info {
+    background: #ecfdf5;
+    border-left: 4px solid var(--good);
+    padding: 0.8rem 1rem;
+    margin: 1rem 0;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.9rem;
+  }
+
+  .file-tree {
+    background: var(--code-bg);
+    padding: 1rem 1.2rem;
+    border-radius: 8px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.85rem;
+    line-height: 1.7;
+    margin: 0.8rem 0 1.2rem;
+    white-space: pre;
+    overflow-x: auto;
+  }
+
+  footer {
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>Fin-JEPA</h1>
+  <p class="subtitle">Joint-Embedding Predictive Architecture for Financial Time Series</p>
+  <div class="badges">
+    <span class="badge">Self-Supervised Learning</span>
+    <span class="badge">Financial Time Series</span>
+    <span class="badge">Latent Prediction</span>
+    <span class="badge">367K Parameters</span>
+    <span class="badge">Python 3.10+</span>
+    <span class="badge">PyTorch</span>
+  </div>
+</header>
+
+
+
+<section class="card">
+  <h2>What is Fin-JEPA?</h2>
+
+  <p>
+    <strong>Fin-JEPA</strong> is a <strong>self-supervised representation learning</strong> system designed for
+    daily equity time series data. It learns compact <strong>64-dimensional latent representations</strong> of stock
+    features by predicting the <em>future latent state</em> from a <em>context window</em> — entirely
+    within latent space, without ever decoding back to raw inputs.
+  </p>
+
+  <div class="arch-diagram">
+    <div class="arch-box">Context Window<br>(past 60 days)</div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-box">PriceEncoder<br>→ Latent z_ctx</div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-box">TransformerPredictor<br>(causal, 4 layers)</div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-box">Predicted Latent<br>ẑ = z_tgt</div>
+  </div>
+
+  <p>
+    The core insight: instead of reconstructing noisy price data (like autoencoders) or contrasting
+    augmented views (like SimCLR), Fin-JEPA learns by predicting the <strong>encoding of future data</strong>
+    from past context. This forces the model to discard non-predictive noise and retain only
+    temporally predictive structure.
+  </p>
+
+  <div class="note">
+    <strong>Key finding:</strong> Latent predictions outperform a naive identity (copy-last) baseline by
+    <strong>10.1%</strong>, proving daily financial time series contain learnable temporal structure.
+    However, prediction error does <em>not</em> provide a statistically significant trading signal (AUC ≈ 0.50).
+  </div>
+</section>
+
+
+
+<section class="card">
+  <h2>Architecture</h2>
+
+  <p>The system has three core components:</p>
+
+  <h3>1. PriceEncoder</h3>
+  <p>
+    A per-day feature extractor that maps 11-dimensional raw features into a latent vector.
+    It consists of a linear projection (<code>11 → embed_dim</code>) followed by a 3-layer MLP
+    with LayerNorm, GELU activations, and a 2-layer output projector. Hidden dimension: 128.
+  </p>
+
+  <h3>2. TransformerPredictor</h3>
+  <p>
+    A causal (autoregressive) Transformer that operates on the sequence of latent embeddings.
+    It uses 4 layers, 4 attention heads, <code>embed_dim=64</code>, MLP scale factor of 4, and
+    dropout of 0.1. The upper-triangular causal mask ensures each position can only attend to
+    past positions, and the output is shifted by one step (predicts next latent).
+  </p>
+
+  <h3>3. SIGReg (Collapse Prevention)</h3>
+  <p>
+    The Sketched Isotropic Gaussian Regularizer prevents representational collapse — a common
+    failure mode in self-supervised learning where the encoder outputs a constant vector for all
+    inputs. SIGReg projects latents onto 512 random directions and matches their distribution to
+    a standard Gaussian using 17-knot spline-based regularization. Weight: λ = 0.1.
+  </p>
+
+  <div class="flow-steps">
+    <div class="flow-step"><span class="step-num">①</span>ctx → Encoder</div>
+    <div class="flow-step"><span class="step-num">②</span>tgt → Encoder</div>
+    <div class="flow-step"><span class="step-num">③</span>Predictor(ctx_latents)</div>
+    <div class="flow-step"><span class="step-num">④</span>MSE(pred, tgt_latents)</div>
+    <div class="flow-step"><span class="step-num">⑤</span>+ λ · SIGReg</div>
+  </div>
+
+  <p>The total loss is:</p>
+  <pre>loss = pred_loss + λ × sigreg_loss</pre>
+  <p>where <code>pred_loss</code> is MSE between the predicted latents and target encoder latents, and
+  <code>λ = 0.1</code> controls the strength of the collapse-prevention regularizer.</p>
+
+  <h3>LeWM Variant (<code>model_lewm.py</code>)</h3>
+  <p>
+    A more sophisticated architecture with AdaLN-zero modulation, SiLU activations,
+    conv1d embedders, batch-normalized projectors, target LayerNorm, and SmoothL1 loss.
+    Uses <code>embed_dim=192</code>, 16 attention heads, 1024 SIGReg projections, and a
+    history window of 3 context steps predicting 1 future step.
+  </p>
+</section>
+
+
+
+<section class="card">
+  <h2>Input Data</h2>
+
+  <h3>Feature Schema (11 normalized daily features)</h3>
+  <pre>FEATURE_COLS = [
+    'open', 'high', 'low', 'close', 'volume', 'returns',
+    'vwap', 'volatility_20', 'vol_ma_20', 'close_ma_20', 'range_pct'
+]</pre>
+
+  <table>
+    <thead>
+      <tr><th>Feature</th><th>Derivation</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>open, high, low, close, volume</code></td><td>Raw (normalized)</td><td>OHLCV data, factor-adjusted</td></tr>
+      <tr><td><code>returns</code></td><td><code>close.pct_change()</code></td><td>Daily percentage return</td></tr>
+      <tr><td><code>vwap</code></td><td><code>(high + low + close) / 3</code></td><td>Volume-weighted average price proxy</td></tr>
+      <tr><td><code>volatility_20</code></td><td><code>returns.rolling(20).std()</code></td><td>20-day rolling volatility</td></tr>
+      <tr><td><code>vol_ma_20</code></td><td><code>volume / volume.rolling(20).mean()</code></td><td>Volume relative to 20-day MA</td></tr>
+      <tr><td><code>close_ma_20</code></td><td><code>close / close.rolling(20).mean()</code></td><td>Close relative to 20-day MA</td></tr>
+      <tr><td><code>range_pct</code></td><td><code>(high - low) / close</code></td><td>Intraday range as percentage</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Data Sources</h3>
+  <table>
+    <thead>
+      <tr><th>Source</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>cedwyh/fin-jepa-h3</code></td><td>Pre-built NPY shards with proper chronological per-stock train/val split, 65-step sequences</td></tr>
+      <tr><td><code>cedwyh/fin-jepa-data</code></td><td>Original preprocessed NPY shards (100K sequences each)</td></tr>
+      <tr><td><code>perctrix/Stock-China-daily</code></td><td>Raw Chinese stock market daily OHLCV data as ZIP of CSVs</td></tr>
+      <tr><td><code>cedwyh/jinjing-shared-data</code></td><td>Additional features (<code>all_features_v2.parquet</code>) for Experiment E</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Data Shape</h3>
+  <p>After preprocessing, each sample is a 2D array of shape <code>(65, 11)</code> — 65 consecutive trading days
+  with 11 features each. The sliding window uses <strong>60 context steps</strong> and <strong>5 prediction steps</strong>
+  with a stride of 5. Data is stored as NPY shards (100K sequences per shard) with a <code>meta.json</code> manifest
+  containing normalization statistics.</p>
+
+  <p><strong>Scale:</strong> Trained on 2M+ samples from 6,230 stocks spanning 2010–2026.</p>
+</section>
+
+
+
+<section class="card">
+  <h2>Output</h2>
+
+  <h3>Model Forward Pass</h3>
+  <p>Calling <code>model.forward(ctx, tgt)</code> returns a dictionary:</p>
+  <pre>{
+    'emb': z_ctx,        <span class="cmt">// (B, T, D) latent embeddings — D=64 by default</span>
+    'pred_loss': float,  <span class="cmt">// MSE between predicted and true target latents</span>
+    'sigreg_loss': float,<span class="cmt">// SIGReg collapse-prevention loss</span>
+    'loss': float        <span class="cmt">// Combined loss = pred_loss + λ × sigreg_loss</span>
+}</pre>
+
+  <h3>Inference Methods</h3>
+  <ul>
+    <li><code>model.encode_batch(batch)</code> — Encodes all timesteps of a batch in one pass</li>
+    <li><code>model.predict_future(ctx, steps)</code> — Autoregressive rollout: predicts next latent, feeds it back as input</li>
+  </ul>
+
+  <h3>Trained Checkpoints</h3>
+  <p>Each model variant saves to <code>output/arch_&lt;name&gt;/</code>:</p>
+  <ul>
+    <li><code>best.pt</code> — Model state_dict (best validation loss)</li>
+    <li><code>meta.json</code> — Training metadata: name, embed_dim, encoder layers, predictor layers, SIGReg projections, total parameters, epochs, elapsed time, and best validation loss</li>
+  </ul>
+
+  <h3>Experiment E Output</h3>
+  <p>Running <code>experiment_e.py</code> produces <code>output/exp_e_results.json</code>:</p>
+  <ul>
+    <li><strong>Error statistics:</strong> Mean and standard deviation of k=1, k=5, k=20 step prediction errors</li>
+    <li><strong>Spearman correlations:</strong> Correlation between prediction error and future volatility</li>
+    <li><strong>AUC scores:</strong> ROC-AUC for using prediction error as a direction predictor (up/down)</li>
+    <li><strong>Regime analysis:</strong> Return and volatility comparison between high-error and low-error periods</li>
+  </ul>
+
+  <h3>Benchmark Output</h3>
+  <p>Running <code>benchmark.py</code> produces <code>output/benchmark_results.json</code> with per-model inference
+  speed: encoding time (ms), full pipeline time (ms), stocks/second, and time to process 5,000 stocks.</p>
+</section>
+
+
+
+<section class="card">
+  <h2>How to Use</h2>
+
+  <h3>Setup</h3>
+  <pre><span class="cmt"># Clone and set up environment</span>
+git clone https://github.com/cedwyh/fin-jepa
+cd fin-jepa
+python -m venv .venv && source .venv/bin/activate
+pip install torch numpy einops pandas scikit-learn scipy huggingface_hub</pre>
+
+  <h3>Quick Test</h3>
+  <pre><span class="cmt"># Run the built-in model test (prints param count, runs forward pass)</span>
+python model.py</pre>
+
+  <pre><span class="cmt"># Test the LeWM variant</span>
+python model_lewm.py</pre>
+
+  <h3>Data Preparation (one-time)</h3>
+  <pre><span class="cmt"># Download raw data, compute features, normalize, create NPY shards, upload to HF Hub</span>
+cd hf
+python prepare_dataset.py</pre>
+
+  <h3>Local Training (Ablation)</h3>
+  <p>Requires the <code>chan-jepa</code> sibling project at <code>~/dev/chan-jepa/data</code>. Uses live Yahoo Finance data.</p>
+  <pre><span class="cmt"># Run 15-variant architecture ablation (50 epochs each)</span>
+python compare_arch.py
+
+<span class="cmt"># Extended ablation: encoder types, predictor types, density sweep</span>
+python compare_arch2.py</pre>
+
+  <h3>Full-Scale GPU Training (HuggingFace Jobs)</h3>
+  <pre><span class="cmt"># Submit to HF Jobs (default t4-small GPU)</span>
+bash hf/submit_hf.sh sweep1
+
+<span class="cmt"># Or run manually within hf/ directory:</span>
+cd hf
+
+<span class="cmt"># Multi-variant sweep (8 configs)</span>
+python sweep.py --tag sweep1 --variants 4
+
+<span class="cmt"># Single model training (200 epochs)</span>
+python train_jepa.py --dataset cedwyh/fin-jepa-data --embed-dim 64 --epochs 200
+
+<span class="cmt"># LeWM-style training</span>
+python train_lewm.py --tag lewm_v2 --epochs 200
+
+<span class="cmt"># Two-phase training (Phase 1: encoder + SIGReg; Phase 2: frozen encoder + predictor)</span>
+python train_lewm_v2.py --phase 1 --tag phase1-exp --D 192 --L 6 --epochs 200
+python train_lewm_v2.py --phase 2 --tag phase2-exp --load phase1-exp --epochs 200</pre>
+
+  <h3>Downstream Evaluation</h3>
+  <pre><span class="cmt"># Run VoE analysis (predictor error as trading signal)</span>
+python experiment_e.py</pre>
+
+  <h3>Analysis &amp; Benchmarking</h3>
+  <pre><span class="cmt"># VoE analysis, factor exposure probing, PCA, t-SNE</span>
+python analyze.py
+
+<span class="cmt"># Inference speed benchmark across all variants</span>
+python benchmark.py</pre>
+</section>
+
+
+
+<section class="card">
+  <h2>Model Variants &amp; Ablation Results</h2>
+
+  <p>15 architecture variants were evaluated. Ranked by validation loss (lower is better):</p>
+
+  <table>
+    <thead>
+      <tr><th>Rank</th><th>Variant</th><th>Embed Dim</th><th>Encoder</th><th>Predictor</th><th>Params</th><th>Val Loss</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td><code>v4_deep_d64</code></td><td>64</td><td>4 layers</td><td>6 layers</td><td>367,296</td><td><strong>1.8595</strong></td></tr>
+      <tr><td>2</td><td><code>cnn_pred6</code></td><td>64</td><td>CNN</td><td>6 layers</td><td>341,184</td><td>1.8954</td></tr>
+      <tr><td>3</td><td><code>density_d48</code></td><td>48</td><td>—</td><td>4 layers</td><td>145,104</td><td>1.9175</td></tr>
+      <tr><td>4</td><td><code>mlp_pred</code></td><td>64</td><td>—</td><td>4 (MLP)</td><td>100,544</td><td>1.9191</td></tr>
+      <tr><td>5</td><td><code>pred_l8</code></td><td>64</td><td>—</td><td>8 layers</td><td>450,752</td><td>1.9356</td></tr>
+      <tr><td>6</td><td><code>v2_base_d64</code></td><td>64</td><td>3 layers</td><td>4 layers</td><td>267,328</td><td>1.9592</td></tr>
+      <tr><td>…</td><td colspan="6">9 more variants ranging from 1.9608 to 2.2647 validation loss</td></tr>
+    </tbody>
+  </table>
+
+  <div class="info">
+    <strong>Best model:</strong> <code>v4_deep_d64</code> with 367K parameters achieves 1.8595 validation loss.
+    All model checkpoints are stored at <code>output/arch_&lt;variant&gt;/best.pt</code>.
+  </div>
+</section>
+
+
+
+<section class="card">
+  <h2>Configuration Reference</h2>
+
+  <h3>Model Hyperparameters</h3>
+  <table>
+    <thead>
+      <tr><th>Parameter</th><th>Base Model</th><th>LeWM Variant</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>embed_dim</code></td><td>64</td><td>192</td><td>Latent space dimension</td></tr>
+      <tr><td><code>enc_layers</code></td><td>3</td><td>— (fixed)</td><td>Encoder MLP depth</td></tr>
+      <tr><td><code>pred_layers</code></td><td>4</td><td>6</td><td>Predictor Transformer depth</td></tr>
+      <tr><td><code>n_heads</code></td><td>4 / 4</td><td>16</td><td>Attention heads (encoder / predictor)</td></tr>
+      <tr><td><code>sigreg_proj</code></td><td>512</td><td>1024</td><td>SIGReg random projection count</td></tr>
+      <tr><td><code>sigreg_lambda</code></td><td>0.1</td><td>0.09</td><td>Collapse-prevention weight</td></tr>
+      <tr><td><code>context / target</code></td><td>60 / 5</td><td>3 / 1</td><td>Context and target window sizes</td></tr>
+      <tr><td><code>target_ln</code></td><td>No</td><td>Yes</td><td>Target LayerNorm (V-JEPA2 trick)</td></tr>
+      <tr><td><code>loss_fn</code></td><td>MSE</td><td>SmoothL1 (β=1.0)</td><td>Prediction loss function</td></tr>
+      <tr><td><code>self_cond</code></td><td>No</td><td>Yes</td><td>Self-conditioning in predictor</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Training Hyperparameters</h3>
+  <table>
+    <thead>
+      <tr><th>Parameter</th><th>Value</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Optimizer</td><td>AdamW</td><td>All scripts</td></tr>
+      <tr><td>Learning rate</td><td>1e-3 (base), 5e-4 (LeWM)</td><td>Varies by script</td></tr>
+      <tr><td>Weight decay</td><td>1e-5</td><td>L2 regularization</td></tr>
+      <tr><td>Batch size</td><td>256 – 512</td><td>Varies by configuration</td></tr>
+      <tr><td>LR schedule</td><td>CosineAnnealingLR or LinearWarmupCosine</td><td></td></tr>
+      <tr><td>Gradient clipping</td><td>1.0</td><td>All scripts</td></tr>
+      <tr><td>Precision</td><td>bf16 (CUDA) / AMP</td><td>HF GPU scripts</td></tr>
+      <tr><td>Ablation epochs</td><td>50</td><td>Local training</td></tr>
+      <tr><td>Full training epochs</td><td>200</td><td>HF GPU training</td></tr>
+      <tr><td>Hardware</td><td>A10G (24 GB)</td><td>~3.5h, 4.3 GB peak GPU memory</td></tr>
+    </tbody>
+  </table>
+
+  <h3>CLI Flags (<code>train_jepa.py</code>)</h3>
+  <table>
+    <thead>
+      <tr><th>Flag</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>--dataset</code></td><td><code>cedwyh/fin-jepa-data</code></td><td>HF dataset repo</td></tr>
+      <tr><td><code>--embed-dim</code></td><td>64</td><td>Latent dimension</td></tr>
+      <tr><td><code>--enc-layers</code></td><td>4</td><td>Encoder layers</td></tr>
+      <tr><td><code>--pred-layers</code></td><td>6</td><td>Predictor layers</td></tr>
+      <tr><td><code>--sigreg-proj</code></td><td>128</td><td>SIGReg projections</td></tr>
+      <tr><td><code>--sigreg-lambda</code></td><td>0.1</td><td>SIGReg weight</td></tr>
+      <tr><td><code>--batch-size</code></td><td>512</td><td>Batch size</td></tr>
+      <tr><td><code>--lr</code></td><td>1e-3</td><td>Learning rate</td></tr>
+      <tr><td><code>--epochs</code></td><td>200</td><td>Training epochs</td></tr>
+      <tr><td><code>--output</code></td><td>(auto)</td><td>Checkpoint directory</td></tr>
+      <tr><td><code>--tag</code></td><td>(auto)</td><td>Experiment tag</td></tr>
+    </tbody>
+  </table>
+
+  <h3>CLI Flags (<code>train_lewm_v2.py</code> — Two-Phase)</h3>
+  <table>
+    <thead>
+      <tr><th>Flag</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>--phase</code></td><td>(required)</td><td>1 (encoder+SIGReg) or 2 (predictor only)</td></tr>
+      <tr><td><code>--tag</code></td><td>(required)</td><td>Experiment tag</td></tr>
+      <tr><td><code>--load</code></td><td>—</td><td>Phase 2: path to Phase 1 checkpoint</td></tr>
+      <tr><td><code>--D</code></td><td>192</td><td>Embedding dimension</td></tr>
+      <tr><td><code>--L</code></td><td>6</td><td>Predictor depth</td></tr>
+      <tr><td><code>--hist</code></td><td>3</td><td>History (context) size</td></tr>
+      <tr><td><code>--nproj</code></td><td>1024</td><td>SIGReg num projections</td></tr>
+      <tr><td><code>--lam</code></td><td>0.09</td><td>SIGReg lambda</td></tr>
+      <tr><td><code>--no-target-ln</code></td><td>False</td><td>Disable target LayerNorm</td></tr>
+      <tr><td><code>--no-smooth-l1</code></td><td>False</td><td>Use MSE instead of SmoothL1</td></tr>
+      <tr><td><code>--no-self-cond</code></td><td>False</td><td>Disable self-conditioning</td></tr>
+    </tbody>
+  </table>
+</section>
+
+
+
+<section class="card">
+  <h2>Complete File Map</h2>
+
+  <div class="file-tree">fin-jepa/
+├── model.py              Core Fin-JEPA (Encoder + Predictor + SIGReg)
+├── model_lewm.py         LeWM-aligned variant (AdaLN-zero, ARPredictor)
+├── ijepa.py              I-JEPA reference on CIFAR-10 (image domain)
+├── compare_arch.py       Architecture ablation — 4 base variants
+├── compare_arch2.py      Extended ablation — encoder types, density sweep
+├── experiment_e.py       Downstream VoE analysis (trading signal)
+├── analyze.py            Analysis suite (VoE, factor exposure, t-SNE)
+├── benchmark.py          Inference speed benchmarking
+├── hf/
+│   ├── train_jepa.py     HF Jobs single-model GPU training
+│   ├── phase1_train.py   Phase 1: encoder-only SIGReg pretraining
+│   ├── phase2_train.py   Phase 2: frozen encoder + trainable predictor
+│   ├── train_lewm.py     HF Jobs LeWM-style end-to-end sweep
+│   ├── train_lewm_v2.py  Two-phase LeWM training
+│   ├── sweep.py          Multi-variant configuration sweep
+│   ├── prepare_dataset.py  Data prep: raw → normalized NPY shards
+│   └── submit_hf.sh      Bash launcher for HF Jobs
+├── output/
+│   └── arch_*/           Per-variant checkpoints and metadata
+├── docs/
+│   ├── jepa_paper.tex     LaTeX paper source
+│   ├── jepa_paper.pdf     Compiled paper PDF
+│   ├── jepa_full_draft.md Full paper draft (Markdown)
+│   └── figures/           Paper figures
+└── README.md             Project overview and citation</div>
+</section>
+
+
+
+<section class="card">
+  <h2>Dependencies &amp; Environment</h2>
+
+  <h3>Python Packages</h3>
+  <table>
+    <thead><tr><th>Package</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>torch ≥ 2.0</code></td><td>Deep learning framework</td></tr>
+      <tr><td><code>numpy</code></td><td>Numerical arrays, NPY shard I/O</td></tr>
+      <tr><td><code>einops</code></td><td>Tensor reshaping (rearrange, repeat)</td></tr>
+      <tr><td><code>huggingface_hub</code></td><td>Dataset/model download and upload</td></tr>
+      <tr><td><code>pandas</code></td><td>Data preprocessing, CSV/Parquet I/O</td></tr>
+      <tr><td><code>scikit-learn</code></td><td>PCA, t-SNE, roc_auc_score</td></tr>
+      <tr><td><code>scipy</code></td><td>Spearman correlation, t-tests</td></tr>
+      <tr><td><code>torchvision</code></td><td>CIFAR-10 benchmark (ijepa.py only)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Hardware Requirements</h3>
+  <table>
+    <thead><tr><th>Task</th><th>Hardware</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Ablation training</td><td>MPS (Apple Silicon) or any GPU</td><td>Sub-400K params, 50 epochs</td></tr>
+      <tr><td>Full-scale training</td><td>A10G GPU (24 GB)</td><td>~3.5 hours, 4.3 GB peak</td></tr>
+      <tr><td>Inference</td><td>Any device (CPU/GPU)</td><td>5,000 stocks in seconds</td></tr>
+    </tbody>
+  </table>
+
+  <h3>External Dependencies</h3>
+  <table>
+    <thead><tr><th>Dependency</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>~/dev/chan-jepa/data</code></td><td>Sibling project with live data download, JEPADataset, feature utils</td></tr>
+      <tr><td><code>~/.cache/huggingface/token</code></td><td>HF authentication for dataset download and model upload</td></tr>
+    </tbody>
+  </table>
+</section>
+
+
+
+<section class="card">
+  <h2>Conceptual Comparison</h2>
+
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Objective</th><th>Decoding?</th><th>Collapse Risk</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Autoencoders / VAEs</td><td>Reconstruct raw input</td><td>Yes</td><td>Low (reconstruction prevents it)</td></tr>
+      <tr><td>SimCLR / TS2Vec</td><td>Contrast augmented views</td><td>No</td><td>Medium (negative pairs prevent it)</td></tr>
+      <tr><td>Masked Modeling (MAE)</td><td>Reconstruct masked patches</td><td>Yes</td><td>Low</td></tr>
+      <tr><td><strong>Fin-JEPA (this work)</strong></td><td><strong>Predict future latent from past</strong></td><td><strong>No</strong></td><td><strong>High (uses SIGReg)</strong></td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    Fin-JEPA avoids reconstructing noisy price data (which would waste capacity on unpredictable noise)
+    and instead focuses on predicting in the latent space. The SIGReg regularizer is the critical
+    component that prevents the encoder from collapsing to a constant representation.
+  </p>
+</section>
+
+<footer>
+  <p>Fin-JEPA — Joint-Embedding Predictive Architecture for Financial Time Series</p>
+  <p>Zenodo DOI: <a href="https://doi.org/10.5281/zenodo.20470971">10.5281/zenodo.20470971</a></p>
+  <p>Generated from project at <code>/home/nayem/Projects/jepa/fin-jepa</code> &middot; Branch: <code>main</code></p>
+</footer>
+
+</div>
+</body>
+</html>
