@@ -17,3 +17,6 @@ output/results/
 checkpoints/**/meta.json
 checkpoints/**/probe.json
 checkpoints/**/train_log.jsonl
+
+# Kaggle-downloaded datasets (large, not source)
+data/kaggle/
