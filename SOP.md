@@ -35,6 +35,21 @@
   re-run Stage 1. **Treat local `*.pt` as the durable backup.**
 - **`colab exec` queues behind a BUSY kernel and times out** — don't rely on it to
   stream output mid-run. Use `colab download` instead (works while BUSY).
+- **Housekeeping — close the session when the work is done.** After you've downloaded
+  the artifacts, run `colab stop -s <name>`. There is only **one** GPU assignment per
+  account; a forgotten `--keep` session blocks every future launch with
+  `TooManyAssignmentsError` and burns GPU quota. Stop it even if you think you might
+  resume later — a fresh `colab run` is cheaper than a stuck launch.
+- **🚨 NEVER ABORT A COLAB COMMAND.** This CLI ties the remote VM's lifetime to the
+  local `colab run` client process. If you abort (or otherwise kill) the command that
+  launched the run, the client dies and **the remote session is torn down with it** —
+  the run is lost and you must relaunch from scratch. Let the command return on its
+  own. If a command seems stuck, it almost certainly is NOT — see §9.
+- **If a run appears "stuck" on the monitor, it is the VM preparing.** The first
+  ~2–4 minutes of every run are the VM cloning the repo, `pip install`ing, and
+  building the feature matrix; `train_log.jsonl` does not exist yet, so the monitor
+  prints a `[pre-training]` phase line — that is normal, NOT an error, NOT a hang.
+  Do not abort; just wait (or run an on-demand `--once` poll, see §9).
 
 ## 2. Launch a training run
 ```bash
@@ -111,10 +126,42 @@ done
   .venv/bin/python probe_forex_h1.py --ckpt checkpoints/forex_h1/best.pt --tau 24
   ```
 
+## 9. Monitoring without it looking stuck (percentage progress)
+The monitor (`watch_progress.py`) is the live progress view. Two ways to use it:
+
+1. **Block to completion** (best when you can let it run):
+   ```
+   .venv/bin/python watch_progress.py -s finjepa-aux05 --epochs 40
+   ```
+   It prints a `[pre-training]` phase line (with elapsed time) during the VM's
+   clone/install/feature-build, then a live `n/40 (pct%)` bar + metrics, then waits
+   for `probe.json` and exits. Do NOT abort — see §1.
+
+2. **Launch-and-return + on-demand polls** (preferred to avoid a 30-min block the
+   user might abort):
+   - Launch detached and return immediately (no blocking monitor in that command):
+     ```
+     setsid stdbuf -oL -eL .colab-venv/bin/colab run --gpu T4 --session finjepa-aux05 \
+         --keep --timeout 5400 colab_run_train.py 40 2.0 0.5 \
+         < /dev/null > /tmp/colab_finjepa-aux05.log 2>&1 & disown
+     echo launched
+     ```
+   - Check progress any time with a quick one-shot (returns in ~5s, shows the
+     percentage; safe-ish, but still: don't abort the LAUNCH command):
+     ```
+     .venv/bin/python watch_progress.py -s finjepa-aux05 --epochs 40 --once
+     ```
+   - When the `--once` poll shows `n == epochs`, download artifacts (§4) and stop
+     the session (§1 housekeeping).
+
+**Rule of thumb:** if a command is going to block >~2 min, prefer the launch-and-return
+pattern and report progress via `--once` polls on request, rather than a long blocking
+monitor the user may be tempted to abort.
+
 ## 8. End-of-run checklist
 - [ ] Code changes committed & **pushed** (VM clones `main`).
 - [ ] Run launched with distinct `--session`, `--keep`, `--timeout 5400`, λ as argv[2].
 - [ ] Monitored live with `watch_progress.py` (confirmed BUSY, not false 100%).
 - [ ] Artifacts downloaded to a **unique** local dir (`checkpoints/forex_h1_<tag>/`).
-- [ ] Session **stopped** to free the single GPU assignment.
+- [ ] Session **stopped** (housekeeping — free the single GPU assignment).
 - [ ] `JOURNAL.md` §4 ledger + `REPORT.md` updated with the new row.
