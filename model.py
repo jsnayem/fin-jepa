@@ -103,12 +103,10 @@ class TransformerPredictor(nn.Module):
 # Full Fin-JEPA
 class FinJEPA(nn.Module):
     def __init__(self, n_features, embed_dim=64, encoder_layers=3, encoder_heads=3,
-                 predictor_layers=4, predictor_heads=4, sigreg_proj=512, sigreg_lambda=0.1,
-                 var_beta=0.1):
+                 predictor_layers=4, predictor_heads=4, sigreg_proj=512, sigreg_lambda=0.1):
         super().__init__()
         self.embed_dim = embed_dim
         self.sigreg_lambda = sigreg_lambda
-        self.var_beta = var_beta
         self.encoder = PriceEncoder(n_features, embed_dim, n_layers=encoder_layers, n_heads=encoder_heads)
         self.predictor = TransformerPredictor(embed_dim, predictor_layers, predictor_heads)
         self.sigreg = SIGReg(embed_dim, num_proj=sigreg_proj)
@@ -133,21 +131,25 @@ class FinJEPA(nn.Module):
 
         if tgt is not None:
             z_full = self.encode_batch(torch.cat([ctx, tgt], dim=1))  # (B, T_ctx+T_tgt, D)
-            z_pred = self.predictor(z_full)                            # (B, T_ctx+T_tgt, D)
-            output['pred'] = z_pred
+            # Prevent collapse structurally: standardize embeddings to zero-mean,
+            # unit-variance (per-feature, over the whole batch). SIGReg enforces
+            # isotropy, so together they target N(0,I); a constant (collapsed)
+            # embedding would have std->0 and blow up under this normalization,
+            # so the encoder is forced to keep informative, varying latents.
+            mu = z_full.mean(dim=(0, 1), keepdim=True)
+            sd = z_full.std(dim=(0, 1), keepdim=True) + 1e-6
+            z_full = (z_full - mu) / sd
             T = ctx.shape[1]
+            z_ctx = z_full[:, :T]
+            z_pred = self.predictor(z_full)                            # (B, T_ctx+T_tgt, D)
+            output['emb'] = z_ctx
+            output['pred'] = z_pred
+            output['z_tgt'] = z_full[:, T:]                             # standardized actual future latents
             pred_loss = torch.nn.functional.mse_loss(z_pred[:, T:], z_full[:, T:])
             output['pred_loss'] = pred_loss
             sigreg_loss = self.sigreg(z_full.permute(1, 0, 2))
             output['sigreg_loss'] = sigreg_loss
-            # Variance/scale regularizer: SIGReg only enforces isotropy, so the
-            # embeddings can collapse to a tiny ball (pred_loss~0 trivially). Force
-            # per-feature variance toward 1 so the representation stays informative.
-            fv = z_full.var(dim=(0, 1))            # per-feature variance over (B, T)
-            var_loss = (fv - 1.0).pow(2).mean()
-            output['var_loss'] = var_loss
-            output['loss'] = (pred_loss + self.sigreg_lambda * sigreg_loss
-                              + self.var_beta * var_loss)
+            output['loss'] = pred_loss + self.sigreg_lambda * sigreg_loss
 
         return output
 

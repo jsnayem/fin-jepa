@@ -48,7 +48,7 @@ def stdz(z):
 
 def evaluate(model, loader, device):
     model.eval()
-    tot = {'loss': 0., 'pred': 0., 'sig': 0., 'var': 0.}
+    tot = {'loss': 0., 'pred': 0., 'sig': 0.}
     n = 0
     er_buf, sz_buf = [], []
     with torch.no_grad():
@@ -59,7 +59,6 @@ def evaluate(model, loader, device):
             tot['loss'] += float(out['loss']) * ctx.size(0)
             tot['pred'] += float(out['pred_loss']) * ctx.size(0)
             tot['sig'] += float(out['sigreg_loss']) * ctx.size(0)
-            tot['var'] += float(out['var_loss']) * ctx.size(0)
             er_buf.append(effective_rank(out['emb']))
             sz_buf.append(stdz(out['emb']))
             n += ctx.size(0)
@@ -81,7 +80,6 @@ def main():
     ap.add_argument('--heads', type=int, default=4)
     ap.add_argument('--sigreg_lambda', type=float, default=0.1)
     ap.add_argument('--sigreg_proj', type=int, default=512)
-    ap.add_argument('--var_beta', type=float, default=0.1, help='variance/scale regularizer weight')
     ap.add_argument('--ckpt', default='checkpoints/forex_h1')
     ap.add_argument('--device', default='cpu')
     ap.add_argument('--workers', type=int, default=0)
@@ -112,7 +110,6 @@ def main():
         encoder_layers=args.enc_layers, encoder_heads=args.heads,
         predictor_layers=args.pred_layers, predictor_heads=args.heads,
         sigreg_proj=args.sigreg_proj, sigreg_lambda=args.sigreg_lambda,
-        var_beta=args.var_beta,
     ).to(device)
     n_params = sum(p.numel() for p in net.parameters())
     print('params:', f'{n_params:,}')
@@ -187,7 +184,7 @@ def main():
             lf.write(json.dumps({
                 'epoch': ep, 'tr_loss': round(tr_loss, 5),
                 'val_loss': round(val['loss'], 5), 'val_pred': round(val['pred'], 5),
-                'val_sig': round(val['sig'], 5), 'val_var': round(val['var'], 5),
+                'val_sig': round(val['sig'], 5),
                 'eff_rank': round(val_er, 3), 'stdZ': round(val_sz, 4),
                 'best': bool(val['loss'] < best_val),
             }) + '\n')

@@ -88,9 +88,9 @@ def extract(net, ds, starts, tau, tgt, device, batch=512, repr_kind='mean'):
         y[~((y_idx >= 0) & (y_idx < len(ds.mega)))] = np.nan
         Ys.append(y.copy())
 
-        z_tgt = net.encode_batch(tgtw)  # (B, T_tgt, D) actual future latents
-        z_pred = out['pred']            # (B, T_ctx+T_tgt, D) joint prediction
-        # VoE: compare PREDICTED future latents vs actual target latents.
+        z_pred = out['pred']            # (B, T_ctx+T_tgt, D) joint prediction (standardized space)
+        z_tgt = out['z_tgt']            # (B, T_tgt, D) standardized actual future latents
+        # VoE: compare PREDICTED future latents vs actual target latents (same space).
         pred_future = z_pred[:, ctx.shape[1]:ctx.shape[1] + tgtw.shape[1]]
         err = F.mse_loss(pred_future, z_tgt, reduction='none').mean((-1, -2)).cpu().numpy()
         Es.append(err)
