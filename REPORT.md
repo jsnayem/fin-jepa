@@ -259,3 +259,49 @@ Stage-1 backups intact.
 .colab-venv/bin/colab download -s finjepa /content/fin-jepa/checkpoints/forex_h1/train_log.jsonl .
 .colab-venv/bin/colab download -s finjepa /content/fin-jepa/checkpoints/forex_h1/probe.json .
 ```
+
+## 16. UPDATE — Stage 1 extended to 40 epochs + λ sweep plan
+
+**40-epoch run completed (fresh Colab T4, 2026-07-11).** Single `colab run --keep
+colab_run_train.py 40` (no staging needed now that training is stable). Local
+artifacts refreshed: `best.pt`(1.6MB), `last.pt`(4.7MB), `meta.json`, `probe.json`,
+`train_log.jsonl`.
+
+```
+epoch  tr_loss  val_loss  val_pred  val_sig  eff_rank  stdZ
+10      0.018    0.0203    0.0079    0.124    5.33      1.000
+20      0.012    0.0136    0.0056    0.082    5.33      1.000
+30      0.0094   0.0116    0.0046    0.070    5.46      1.000
+37      0.0084   0.0106*   0.0041    0.064    5.51      1.000   (*best_val_loss)
+40      0.0081   0.0108    0.0046    0.062    5.67      1.000
+```
+- `stdZ`≈1.0 throughout, `val_pred_loss` 0.0079→0.0041 → objective well-fit, no collapse.
+- **`val_eff_rank` stuck at ~5–5.7/64** — the only signal that didn't improve. Encoder
+  packs all learned structure into a ~5-dim subspace.
+- **Probe/downstream flat (noise):**
+  `probe_IC 0.011`, `probe_rankIC -0.012`, `probe_dirAUC 0.482`;
+  `VoE_alpha_label_AUC 0.501`, `VoE_rawdir_AUC 0.503`.
+
+**Conclusion:** confirms the §15 hypothesis — training is healthy but effective rank is
+the bottleneck; a latent-only JEPA on hourly FX with λ=0.1 yields no tradable signal.
+
+**NEXT STEP (now executing — λ sweep):** raise `sigreg_lambda` to force wider/richer
+latents (the §15 option #2). To make λ tunable from the Colab CLI without code churn,
+`colab_run_train.py` now reads `FINJEPA_LAMBDA` (default 0.1) and forwards
+`--sigreg_lambda` to `train_forex_h1.py`. Commit `colab_run_train.py` and push, then
+relaunch:
+```
+FINJEPA_LAMBDA=1.0 .colab-venv/bin/colab run --gpu T4 --session finjepa-l1 \
+    --keep --timeout 5400 colab_run_train.py 40
+```
+Plan: run λ∈{0.5, 1.0} (and if rank still low, λ=2.0) for 40 epochs each, track
+`val_eff_rank` as the key metric. If rank climbs toward 20–40/64 and probe IC/rankIC
+rise above noise (|IC|>~0.02, dirAUC>0.52), the encoder is finally encoding structure.
+If rank stays ~5 regardless of λ, the low rank is intrinsic (data/task), and per §2.6
+we accept that latent-only JEPA on FX does not encode forward returns — at which point
+add a return-prediction auxiliary loss or longer horizon as the next lever.
+
+**Colab session hygiene:** the previous `finjepa` session is kept/alive; each new λ run
+uses a distinct `--session` name (re-assign on a kept session is rejected). Stop a
+session when done: `.colab-venv/bin/colab stop -s <name>`.
+
