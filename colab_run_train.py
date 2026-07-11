@@ -40,7 +40,14 @@ if __name__ == "__main__":
     if resume:
         train_cmd += ["--resume", resume]
     print(">>", " ".join(train_cmd))
-    subprocess.run(train_cmd, check=True)
+    # Capture training output to a VM log so a crash isn't swallowed by the
+    # wrapper's CalledProcessError (download train_run.log to inspect failures).
+    with open("train_run.log", "w") as tl:
+        try:
+            subprocess.run(train_cmd, check=True, stdout=tl, stderr=subprocess.STDOUT)
+        finally:
+            tl.flush()
+    sh("cat train_run.log")
 
     sh(f"{sys.executable} probe_forex_h1.py --ckpt {CKPT}/best.pt --tau 24 "
        f"--device cuda --out {CKPT}/probe.json")
