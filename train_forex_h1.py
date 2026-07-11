@@ -60,10 +60,10 @@ def evaluate(model, loader, device, aux_lambda=0.0):
             tot['pred'] += float(out['pred_loss']) * ctx.size(0)
             tot['sig'] += float(out['sigreg_loss']) * ctx.size(0)
             if getattr(model, 'return_head', None) is not None and 'y' in b:
-                y = b['y'].to(device)
+                y = b['y'].to(device=device, dtype=torch.float32)
                 m = ~torch.isnan(y)
                 if m.any():
-                    tot['aux'] += float(F.mse_loss(out['ret_pred'][m], y[m])) * int(m.sum())
+                    tot['aux'] += float(F.mse_loss(out['ret_pred'][m], y[m]).detach()) * int(m.sum())
             er_buf.append(effective_rank(out['emb']))
             sz_buf.append(stdz(out['emb']))
             n += ctx.size(0)
@@ -157,12 +157,12 @@ def main():
             loss = out['loss']
             # Auxiliary forward-label loss (only if a return head is present).
             if getattr(net, 'return_head', None) is not None and 'y' in b:
-                y = b['y'].to(device)
+                y = b['y'].to(device=device, dtype=torch.float32)
                 m = ~torch.isnan(y)
                 if m.any():
                     ret_loss = F.mse_loss(out['ret_pred'][m], y[m])
                     loss = loss + args.aux_lambda * ret_loss
-                    run['aux'] += float(ret_loss) * int(m.sum())
+                    run['aux'] += float(ret_loss.detach()) * int(m.sum())
             opt.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
