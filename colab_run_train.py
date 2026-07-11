@@ -14,7 +14,7 @@ import sys
 
 REPO = "https://github.com/jsnayem/fin-jepa.git"
 EPOCHS = int(sys.argv[1]) if len(sys.argv) > 1 else 10
-BATCH = int(os.environ.get("FINJEPA_BATCH", "256"))
+BATCH = int(os.environ.get("FINJEPA_BATCH", sys.argv[4] if len(sys.argv) > 4 else "256"))
 LAMBDA = os.environ.get("FINJEPA_LAMBDA", sys.argv[2] if len(sys.argv) > 2 else "0.1")
 AUX = os.environ.get("FINJEPA_AUX", sys.argv[3] if len(sys.argv) > 3 else "0.0")
 CKPT = "checkpoints/forex_h1"
