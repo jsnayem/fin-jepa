@@ -52,8 +52,8 @@ def progress_line(session, epochs, dest):
     if not download(session, REMOTE_LOG, dest):
         st = session_status(session)
         if st == "GONE":
-            return f"[!] session '{session}' not found — it was likely killed "
-                   f"(e.g. the launching command was aborted). Relaunch.", True
+            return ("[!] session '%s' not found — likely killed (e.g. the "
+                    "launching command was aborted). Relaunch." % session, True)
         # pre-training phase: normal, ~2-4 min
         return (f"[pre-training] VM {st} — cloning repo / installing deps / "
                 f"building features. Normal; epoch 1 appears in ~2-4 min.", False)
