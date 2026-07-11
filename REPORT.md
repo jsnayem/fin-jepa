@@ -305,3 +305,41 @@ add a return-prediction auxiliary loss or longer horizon as the next lever.
 uses a distinct `--session` name (re-assign on a kept session is rejected). Stop a
 session when done: `.colab-venv/bin/colab stop -s <name>`.
 
+## 17. UPDATE — λ=1.0 run + live progress monitor
+
+**Live progress is now possible.** Training writes `train_log.jsonl` (opened in append
+mode per epoch → flushed on close), and `colab download` works while the session is
+BUSY. So instead of blocking on the `DONE` marker, poll that file. New local helper:
+```
+.venv/bin/python watch_progress.py -s <session> --epochs 40 --dest /tmp/l1_log.jsonl
+```
+It downloads `train_log.jsonl` every `--interval` s, prints a 20-char bar +
+`n/40 (pct%)` + latest `tr/val/effR/stdZ`, then waits for `probe.json` and exits.
+
+**λ=1.0 run (session `finjepa-l1`, 2026-07-11) — ran to completion:**
+```
+epoch  tr_loss  val_loss  val_pred  val_sig  eff_rank  stdZ
+10      0.045    0.0468    0.0149    0.0319   9.12      0.999
+20      0.033    0.0348    0.0110    0.0238   11.42     0.999
+30      0.026    0.0316    0.0098    0.0217   12.05     0.999
+39      0.020    0.0301*   0.0098    0.0203   12.28     0.999   (*best_val_loss)
+```
+- **`val_eff_rank` 5.67 → 12.28** — SIGReg at λ=1.0 successfully widens the latent
+  subspace (the §16 bottleneck). `best_val_loss` rose 0.0106→0.0301 because higher λ
+  trades `pred` fidelity for isotropy; `val_sig` fell to 0.020 (well-regularized).
+- **Probe/downstream improved above noise** (artifacts in `checkpoints/forex_h1_l1/`):
+  `probe_IC 0.045` (was 0.011), `probe_rankIC +0.023` (was −0.012),
+  `probe_dirAUC 0.505`, `VoE_alpha_label_AUC 0.504`. IC/rankIC now clear of the
+  |IC|≈0.02 noise floor; dirAUC still marginal (>0.52 target not yet met).
+
+**Conclusion:** the §16 hypothesis was right — low effective rank was the culprit, and
+raising `sigreg_lambda` fixes it, unlocking a real (if still modest) downstream signal.
+
+**NEXT STEP (sweep to find optimal λ):** λ=1.0 is a clear winner over 0.1. To locate the
+peak, run λ∈{0.5, 2.0} (each its own `--session`, stop the prior first). Track
+`probe_IC`/`probe_dirAUC` and `val_eff_rank` jointly — too-high λ over-spreads and push
+`best_val_loss` up. If dirAUC crosses 0.52 at some λ, that's the operating point;
+otherwise accept the λ=1.0 signal and move to a return-prediction auxiliary loss /
+longer horizon as the next lever (per §16).
+
+
