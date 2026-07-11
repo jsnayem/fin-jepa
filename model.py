@@ -96,7 +96,7 @@ class TransformerPredictor(nn.Module):
 
 
 # Full Fin-JEPA
-class Fin-JEPA(nn.Module):
+class FinJEPA(nn.Module):
     def __init__(self, n_features, embed_dim=64, encoder_layers=3, encoder_heads=3,
                  predictor_layers=4, predictor_heads=4, sigreg_proj=512, sigreg_lambda=0.1):
         super().__init__()
@@ -166,7 +166,7 @@ class MLPProbe(nn.Module):
 
 
 if __name__ == "__main__":
-    model = Fin-JEPA(n_features=11, embed_dim=64)
+    model = FinJEPA(n_features=11, embed_dim=64)
     print(f"Params: {sum(p.numel() for p in model.parameters()):,}")
     ctx = torch.randn(4, 60, 11)
     tgt = torch.randn(4, 5, 11)
