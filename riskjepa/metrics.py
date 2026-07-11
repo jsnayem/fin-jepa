@@ -35,7 +35,7 @@ def _rankic(pred, y):
 
 
 def backtest(y_pred, y_true, tb=None, c1=0.5, spread_bars=0.10,
-             vol=None, per_bar=True):
+             vol=None, per_bar=True, sigma=None):
     """Run the cost-aware risk-reward backtest.
 
     Args:
@@ -44,8 +44,11 @@ def backtest(y_pred, y_true, tb=None, c1=0.5, spread_bars=0.10,
         y_true: (N,) realized vol-normalized forward return (aligned with y_pred).
         tb:     (N,) optional triple-barrier sign (+1/-1/0); if given, bars with
                 tb==0 are forced FLAT regardless of c1 (data-driven kill-switch).
-        c1:     conviction threshold as a multiple of std(|y_pred|); below this
-                the position is FLAT.
+        c1:     conviction threshold. Two interpretations:
+                  - if `sigma` is None: c1 is a multiple of std(|y_pred|); below it
+                    the position is FLAT.
+                  - if `sigma` is given (per-sample uncertainty σ̂_t): the kill-switch
+                    is |ŷ_t| < c1·σ̂_t (the RiskJEPA design-doc rule). Below it, FLAT.
         spread_bars: round-turn cost in 'vol-normalized return' units. Both y_pred
                 and y_true are already divided by σ_t (vol60), whose hourly value on
                 EUR/USD ≈ 0.18% = 0.0018. One pip = 0.0001 = 0.0001/0.0018 ≈ 0.055
@@ -54,25 +57,35 @@ def backtest(y_pred, y_true, tb=None, c1=0.5, spread_bars=0.10,
         vol:    (N,) optional realized vol σ_t — currently informational; both
                 sides already vol-normalized so costs are in the same units.
         per_bar: unused placeholder for API symmetry (P&L is per-bar here).
+        sigma:  (N,) optional per-sample predictive uncertainty σ̂_t (from unc_head).
+                When provided, the kill-switch uses the magnitude-vs-uncertainty rule.
 
     Returns dict of metrics:
         n, n_trade, pct_flat, winrate, profit_factor, sharpe, mean_ret, tot_ret,
-        rankIC, mean_pos, used_triple_barrier.
+        rankIC, mean_pos, used_triple_barrier, used_uncertainty.
     """
     y_pred = np.asarray(y_pred, dtype=float)
     y_true = np.asarray(y_true, dtype=float)
     if tb is not None:
         tb = np.asarray(tb, dtype=float)
+    if sigma is not None:
+        sigma = np.asarray(sigma, dtype=float)
 
     n = len(y_pred)
-    thr = c1 * np.std(np.abs(y_pred)) + 1e-9
+    # kill-switch threshold
+    if sigma is not None:
+        thr = c1 * np.clip(sigma, 1e-6, None)         # per-sample: |y| < c1*sigma
+    else:
+        thr = c1 * np.std(np.abs(y_pred)) + 1e-9      # global: |y| < c1*std(|y|)
 
     # position sizing (kill-switch applied)
     pos = np.zeros(n, dtype=float)
     active = np.abs(y_pred) >= thr
     if tb is not None:
         active &= (tb != 0.0)               # triple-barrier 0 => always flat
-    pos[active] = np.sign(y_pred[active]) * np.tanh(np.abs(y_pred[active]) / thr)
+    pos[active] = np.sign(y_pred[active]) * np.tanh(np.abs(y_pred[active]) / thr[active]
+                                                     if sigma is not None else
+                                                     np.abs(y_pred[active]) / thr)
 
     # realized P&L per bar (vol-normalized): position * forward return
     gross = pos * y_true
@@ -87,7 +100,12 @@ def backtest(y_pred, y_true, tb=None, c1=0.5, spread_bars=0.10,
     winrate = float(len(wins) / n_trade) if n_trade > 0 else float('nan')
     gross_win = wins.sum()
     gross_loss = -losses.sum()
-    profit_factor = float(gross_win / gross_loss) if gross_loss > 0 else float('inf')
+    if n_trade == 0:
+        profit_factor = 0.0          # no trades -> no profit (not inf)
+    elif gross_loss > 0:
+        profit_factor = float(gross_win / gross_loss)
+    else:
+        profit_factor = float('inf')  # all wins, no losses
 
     mean_ret = float(pnl.mean())
     tot_ret = float(pnl.sum())
@@ -98,6 +116,7 @@ def backtest(y_pred, y_true, tb=None, c1=0.5, spread_bars=0.10,
     rank_ic = _rankic(y_pred, y_true)
 
     used_tb = tb is not None
+    used_sig = sigma is not None
     return {
         'n': n,
         'n_trade': n_trade,
@@ -110,22 +129,25 @@ def backtest(y_pred, y_true, tb=None, c1=0.5, spread_bars=0.10,
         'rankIC': rank_ic,
         'mean_pos': float(np.mean(np.abs(pos))),
         'used_triple_barrier': used_tb,
+        'used_uncertainty': used_sig,
         'c1': c1,
         'spread_bars': spread_bars,
     }
 
 
-def sweep_c1(y_pred, y_true, tb=None, c1_grid=None, spread_bars=1.0):
+def sweep_c1(y_pred, y_true, tb=None, c1_grid=None, spread_bars=1.0, sigma=None):
     """Sweep the conviction threshold and return a table of metrics.
 
     Returns a list of dicts (one per c1). Useful to calibrate how selective the
-    kill-switch needs to be for EUR/USD's thin edge.
+    kill-switch needs to be for EUR/USD's thin edge. When `sigma` is given the
+    kill-switch is the per-sample |ŷ| < c1·σ̂ rule; otherwise c1 is relative to
+    std(|y_pred|).
     """
     if c1_grid is None:
         c1_grid = [0.3, 0.5, 0.75, 1.0, 1.5, 2.0]
     rows = []
     for c1 in c1_grid:
-        m = backtest(y_pred, y_true, tb=tb, c1=c1, spread_bars=spread_bars)
+        m = backtest(y_pred, y_true, tb=tb, c1=c1, spread_bars=spread_bars, sigma=sigma)
         m = {k: m[k] for k in ('c1', 'n_trade', 'pct_flat', 'winrate',
                                 'profit_factor', 'sharpe', 'rankIC', 'mean_pos')}
         rows.append(m)

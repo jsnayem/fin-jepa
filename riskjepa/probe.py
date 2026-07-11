@@ -22,10 +22,13 @@ import json
 import os
 
 import numpy as np
+import torch
 
 import forex_features as ff
 import riskjepa.features as rjf
 import riskjepa.metrics as rjm
+import riskjepa.model as rjm_model
+import riskjepa.walkforward as rjwf
 
 
 # ── ranking metrics (no sklearn) ─────────────────────────────────────────────
@@ -108,57 +111,72 @@ def baseline_probe(df, tau, device, spread_bars, c1_grid):
     }
 
 
-# ── frozen-encoder probe (35-feature RiskJEPA checkpoint) ─────────────────────
-def frozen_probe(df, ckpt, tau, device, spread_bars, c1_grid):
-    import torch
-    import model  # NB: original model; RiskJEPA checkpoint schema differs — see note
+# ── frozen RiskJEPA probe + walk-forward backtest (GPU-trained checkpoint) ─────
+def frozen_probe(df, ckpt, tau, device, spread_bars, c1_grid, n_folds=5, use_sigma=False):
+    """Load a RiskJEPA checkpoint and run the purged walk-forward cost-aware
+
+    backtest with profit-factor / Sharpe selection (the model's own selection
+    metric). Replaces the old ridge-probe-on-encoder path — RiskJEPA has its own
+    ret_head / unc_head / tb_head, so we evaluate those directly.
+    """
     ck = torch.load(ckpt, map_location=device, weights_only=False)
     ta = ck.get('args', {})
-    # NOTE: a true RiskJEPA checkpoint is built in new_model.py (not yet written).
-    # This path expects a checkpoint whose 'args' carries n_features=35 (the
-    # riskjepa schema). It is the GPU-retraining step's output.
-    net = model.FinJEPA(
-        n_features=ta.get('n_features', 35), embed_dim=ta.get('embed_dim', 64),
-        encoder_layers=ta.get('enc_layers', 4), encoder_heads=ta.get('heads', 4),
-        predictor_layers=ta.get('pred_layers', 6), predictor_heads=ta.get('heads', 4),
-        sigreg_proj=ta.get('sigreg_proj', 512), sigreg_lambda=ta.get('sigreg_lambda', 0.1),
+    # rebuild the exact architecture from the checkpoint's saved args
+    net = rjm_model.RiskJEPA(
+        n_features=ta.get('n_features', 35),
+        embed_dim=ta.get('embed_dim', 64),
+        enc_conv_blocks=ta.get('enc_conv_blocks', 2),
+        patch_size=ta.get('patch_size', 1),
+        predictor_layers=ta.get('pred_layers', 4),
+        predictor_heads=ta.get('heads', 4),
+        sigreg_proj=ta.get('sigreg_proj', 512),
+        sigreg_lambda=ta.get('sigreg_lambda', 1.0),
+        use_revin=ta.get('use_revin', True),
+        aux_lambda=ta.get('aux_lambda', 0.5),
+        tb_lambda=ta.get('tb_lambda', 0.3),
+        nll_lambda=ta.get('nll_lambda', 0.3),
+        horizon=tau,
     ).to(device)
     net.load_state_dict(ck['model_state'])
     net.eval()
 
     ds, info = rjf.make_dataset(df)
-    va_s = ds.starts[ds.split == 'val']
-    ctxs, ys, tbs = [], [], []
-    with torch.no_grad():
-        for i in va_s:
-            c = torch.FloatTensor(ds.feat[i - ds.ctx:i]).unsqueeze(0).to(device)
-            z = net.encode_batch(c)           # (1, CTX, D)
-            ctxs.append(z.mean(1).cpu().numpy().ravel())
-            ys.append(ds.vret[i + ds.tgt - 1])
-            tbs.append(ds.tb[i + ds.tgt - 1])
-    Xva = np.array(ctxs); yva = np.array(ys); tbva = np.array(tbs)
+    print(f"riskjepa dataset: { {k: info[k] for k in ('n_features', 'n_train', 'n_val', 'cutoff')} }")
 
-    # probe head on the representation
-    Xtr_coll, ytr_coll = [], []
-    tr_s = ds.starts[ds.split == 'train']
-    with torch.no_grad():
-        for i in tr_s:
-            c = torch.FloatTensor(ds.feat[i - ds.ctx:i]).unsqueeze(0).to(device)
-            z = net.encode_batch(c)
-            Xtr_coll.append(z.mean(1).cpu().numpy().ravel())
-            ytr_coll.append(ds.vret[i + ds.tgt - 1])
-    Xtr = np.array(Xtr_coll); ytr = np.array(ytr_coll)
-    pred_va = ridge_predict(Xtr, ytr, Xva, lam=1.0)
+    embargo = int(ta.get('embago') or ds.tgt)
+    print(f"\n[walk-forward backtest] {n_folds} folds, embargo={embargo}, "
+          f"spread={spread_bars}, use_sigma={use_sigma}")
+    res = rjwf.walk_forward(net, ds, rjwf_predict_for_probe, device=str(device),
+                            n_folds=n_folds, embargo=embargo,
+                            spread_bars=spread_bars, c1_grid=c1_grid,
+                            use_tb=True, use_sigma=use_sigma)
+    return {'mode': 'frozen', 'ckpt': ckpt, 'info': info, **res}
 
-    rows = rjm.sweep_c1(pred_va, yva, tb=tbva, c1_grid=c1_grid, spread_bars=spread_bars)
-    return {'mode': 'frozen', 'ckpt': ckpt, 'info': info, 'backtest_sweep': rows}
+
+@torch.no_grad()
+def rjwf_predict_for_probe(ds, idx, net, device):
+    """Probe forward fn compatible with riskjepa.walkforward.run_fold."""
+    idx = np.asarray(idx)
+    C = torch.stack([
+        torch.from_numpy(np.ascontiguousarray(ds.feat[i - ds.ctx:i])).float()
+        for i in idx
+    ]).to(device)
+    o = net(C)
+    y_true = np.array([ds.vret[i + ds.tgt - 1] for i in idx], dtype=float)
+    tb = np.array([ds.tb[i + ds.tgt - 1] for i in idx], dtype=float)
+    return {
+        'y_pred': o['ret_pred'].detach().cpu().numpy().astype(float),
+        'y_true': y_true,
+        'tb': tb,
+        'sigma': o['sigma'].detach().cpu().numpy().astype(float),
+    }
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--data', default='data/EURUSD_H1.csv')
     ap.add_argument('--ckpt', default=None,
-                    help='35-feature RiskJEPA checkpoint (frozen-encoder mode).')
+                    help='RiskJEPA checkpoint to evaluate via walk-forward backtest.')
     ap.add_argument('--tau', type=int, default=rjf.TGT,
                     help='forward horizon (bars) — defaults to riskjepa TGT=12')
     ap.add_argument('--baseline', action='store_true',
@@ -168,18 +186,28 @@ def main():
                     help='round-turn cost in vol-normalized return units (~0.1=1.8pip RT on 0.18%% vol)')
     ap.add_argument('--c1', type=str, default='0.3,0.5,0.75,1.0,1.5,2.0',
                     help='conviction thresholds to sweep (comma-separated)')
+    ap.add_argument('--n_folds', type=int, default=5,
+                    help='number of walk-forward folds (frozen mode)')
+    ap.add_argument('--use_sigma', action='store_true',
+                    help='use the unc_head uncertainty for the |y|<c1*sigma kill-switch')
     ap.add_argument('--out', default='checkpoints/riskjepa/probe.json')
     args = ap.parse_args()
 
     c1_grid = [float(x) for x in args.c1.split(',')]
-    device = torch.device(args.device) if args.ckpt else 'cpu'
+    device = args.device
     if args.ckpt:
         import torch  # noqa
     df = ff.load_eurusd_h1(args.data)
 
     if args.ckpt:
-        res = frozen_probe(df, args.ckpt, args.tau, str(device),
-                           args.spread_bars, c1_grid)
+        res = frozen_probe(df, args.ckpt, args.tau, device,
+                           args.spread_bars, c1_grid,
+                           n_folds=args.n_folds, use_sigma=args.use_sigma)
+        # pretty-print the aggregate
+        agg = res.get('agg', {})
+        print('\n[walk-forward aggregate — mean ± std across folds]')
+        for k, v in agg.items():
+            print(f"  {k:>10}: {v['mean']:+.4f} ± {v['std']:.4f} (n={v['n_finite']})")
     else:
         res = baseline_probe(df, args.tau, 'cpu', args.spread_bars, c1_grid)
 
