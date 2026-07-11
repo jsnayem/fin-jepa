@@ -1,22 +1,18 @@
 """
 kaggle_run_train.py — executed INSIDE a Kaggle GPU script kernel.
 
-Kaggle script kernels get NO reliable internet, so we do NOT `git clone` or
-`pip install`. The fin-jepa repo is attached as a **dataset**
-(`fin-jepa-train-bundle`, which contains the repo under `fin-jepa/`) and is
-mounted read-only at /kaggle/input/fin-jepa-train-bundle/fin-jepa. We copy it to
-/kaggle/working (writable), then run in-place.
+Locates the fin-jepa repo, then trains the RiskJEPA (risk-reward) path:
+  - Prefers a fresh `git clone` of main (needs internet; gets the latest code).
+  - Falls back to an attached dataset mount (`fin-jepa-train-bundle`, repo under
+    `fin-jepa/`) if the clone fails (no/limited internet).
+  - Runs riskjepa/train.py on GPU (sigreg_lambda=2.0, aux_lambda=0.5 — the config
+    with best effective rank + a real probe IC in the latent-only sweep,
+    retargeted at the vol-normalized return label), then runs riskjepa/probe.py
+    (frozen-encoder) + the cost-aware risk-reward backtest so the kernel log /
+    OUTPUT carries the real P&L verdict. Artifacts copied to /kaggle/working.
 
-Pipeline (RiskJEPA risk-reward path):
-  - trains riskjepa/train.py on GPU (sigreg_lambda=2.0, aux_lambda=0.5 — the
-    config with best effective rank + a real probe IC in the latent-only sweep,
-    retargeted now at the vol-normalized return label),
-  - runs riskjepa/probe.py (frozen-encoder) + the cost-aware risk-reward
-    backtest, so the kernel log/OUTPUT carries the real P&L verdict.
-  - copies artifacts to /kaggle/working (downloadable from the kernel).
-
-NOTE: model.py previously imported einops unnecessarily; that import is removed,
-so torch alone is required (present in the Kaggle PyTorch base image).
+NOTE: model.py's unused einops import was removed, so torch alone is required
+(present in the Kaggle PyTorch base image) — no pip install needed.
 """
 import os
 import shutil
@@ -45,16 +41,26 @@ def sh(cmd, capture=False):
 
 
 if __name__ == "__main__":
-    # Locate the repo (dataset mount, or fall back to cwd if run locally/debug).
-    if os.path.isdir(DATASET_MOUNT):
+    # Locate the repo. Prefer a fresh git clone (needs internet, gives latest
+    # main); fall back to an attached dataset mount (no internet); else cwd.
+    repo = None
+    if not os.path.isdir("fin-jepa"):
+        print(">> attempting git clone (needs internet)...")
+        try:
+            sh("git clone https://github.com/jsnayem/fin-jepa.git")
+            if os.path.isdir("fin-jepa"):
+                repo = "fin-jepa"
+        except Exception as e:
+            print(">> clone failed:", e)
+    if repo is None and os.path.isdir(DATASET_MOUNT):
         repo = os.path.join(WORK, "fin-jepa")
         if os.path.isdir(repo):
             shutil.rmtree(repo)
         shutil.copytree(DATASET_MOUNT, repo)
         print(f">> copied dataset repo -> {repo}")
-    elif os.path.isdir("fin-jepa"):
+    elif repo is None and os.path.isdir("fin-jepa"):
         repo = "fin-jepa"
-    else:
+    if repo is None:
         repo = os.getcwd()
     os.chdir(repo)
 
