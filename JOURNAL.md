@@ -183,6 +183,32 @@
 | 2026-07-11 | finjepa-l2 | 2.0 | 40 | 14.77 | 0.052 | 0.502 | best IC; dirAUC still ~0.50 |
 | | | | | | | | |
 
+### 2026-07-12 — RiskJEPA pivot: Kaggle GPU retrain (Colab quota spent)
+- **Pivot:** Colab GPU quota exhausted for the day → moved compute to **Kaggle GPU**
+  (user `nayem939`, ACCESS_TOKEN auth, `kaggle` CLI 2.2.3 in `.venv`). Same proven
+  wrapper pattern as `colab_run_train.py`, pointed at the RiskJEPA (risk-reward) path.
+- **Built `riskjepa/` (committed 5619426):** regime-aware data path (CTX=48/TGT=12,
+  35 feats = 15 base + 17 alpha + 3 MR, vol-normalized forward-return label,
+  triple-barrier sign 0=FLAT, embargo) + cost-aware backtest (`metrics.py`) +
+  probe (`probe.py`, CPU baseline + frozen-encoder mode).
+- **Built `riskjepa/train.py` (committed 259e470):** FinJEPA pretrain on the 35-feat
+  schema with `aux_lambda>0` so `return_head` predicts the vol-normalized return
+  (the RiskJEPA target, replacing mega-alpha). Config chosen: `sigreg_lambda=2.0`,
+  `aux_lambda=0.5` (the §17 sweep's best rank + modest IC, retargeted).
+- **Kaggle kernel `nayem939/fin-jepa-riskjepa-train`** (GPU script, private): entry
+  `kaggle_run_train.py` clones the repo, `pip install einops`, trains 40 ep on cuda,
+  runs `riskjepa/probe.py` (frozen-encoder + risk-reward backtest), copies
+  `riskjepa_*.pt/json` to `/kaggle/working/`. Pushed v2, **RUNNING**.
+- **Pre-flight smoke (local CPU):** `python -m riskjepa.train --epochs 3 --batch 64`
+  runs (import + 35-feat loop OK; CPU slow, ~30× vs GPU per JOURNAL §E). Full
+  validation deferred to the Kaggle GPU run.
+- **Honest expectation (from research/new_model_design.md):** winrate 50–53%, profit
+  factor 1.05–1.25, Sharpe 0.3–0.8, %-flat 40–70%. Anything dramatically better OOS
+  (Sharpe>1.5, PF>1.6, winrate>56%) = leakage, treat as bug.
+- **Lessons carried over from Colab runs:** cast labels to float32 (Double/Float crash
+  bug); `einops` must be pip-installed on remote; `train_log.jsonl` truncates on ep1;
+  `*.pt` + run JSONs are gitignored (clone pollution). Kernel re-runs clone fresh main.
+
 **Sweep read-out:** `probe_IC` and `val_eff_rank` rise monotonically with λ
 (0.1→2.0). `best_val_loss` also rises (0.011→0.045) — expected, since higher λ
 trades `pred` fidelity for isotropy. `probe_dirAUC` stays ~0.50–0.51 across all λ,
