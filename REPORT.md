@@ -368,4 +368,26 @@ verify with `colab status -s <name>` (must be BUSY while training).
 longer context/horizon (CTX/TGT), or a richer encoder. λ is now doing its job
 (spreading rank); the remaining gap is directional, not dimensional.
 
+## 18. UPDATE — auxiliary forward-label head (directional signal experiment)
+
+**Hypothesis:** `dirAUC` stays ~0.50 because nothing forces the latent to be
+*decodable* into the forward label. Add a lightweight head that predicts the forward
+mega-alpha (the probe's label, already z-scored) from the **context-embedding mean**
+(the same repr the probe uses). Gradient flows into the encoder, so the latent is
+shaped to make that label linearly predictable → should lift `probe_IC`/`dirAUC`
+without disturbing the JEPA pretask.
+
+**Implementation (committed):** `model.FinJEPA` gains `return_head = nn.Linear(D,1)`
+**only when `aux_lambda>0`** (paper-faithful baselines byte-identical). `forex_features`
+adds the forward label `y = mega[start+tgt]` to each batch. `train_forex_h1.py` adds
+`--aux_lambda`, combines `loss = jepa_loss + aux_lambda * mse(ret_pred, y)` (NaN-masked),
+and logs `val_aux`. `best_val` still uses the JEPA loss only (faithful selection).
+`colab_run_train.py` forwards `aux_lambda` as argv[3] / `FINJEPA_AUX`.
+
+**Run plan:** launch with `sigreg_lambda=2.0` (best rank from §17) + `aux_lambda=0.5`,
+40 ep, session `finjepa-aux05`, artifacts → `checkpoints/forex_h1_aux05/`. Compare
+`probe_dirAUC`/`probe_IC` vs the λ=2.0 baseline (dirAUC 0.502, IC 0.052). If dirAUC
+crosses ~0.52, the aux head is the missing lever; if not, try `aux_lambda`∈{1.0, 2.0}
+or a longer horizon.
+
 
