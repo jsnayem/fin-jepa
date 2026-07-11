@@ -40,11 +40,16 @@
   account; a forgotten `--keep` session blocks every future launch with
   `TooManyAssignmentsError` and burns GPU quota. Stop it even if you think you might
   resume later — a fresh `colab run` is cheaper than a stuck launch.
-- **🚨 NEVER ABORT A COLAB COMMAND.** This CLI ties the remote VM's lifetime to the
-  local `colab run` client process. If you abort (or otherwise kill) the command that
-  launched the run, the client dies and **the remote session is torn down with it** —
-  the run is lost and you must relaunch from scratch. Let the command return on its
-  own. If a command seems stuck, it almost certainly is NOT — see §9.
+- **Mental model (from COLAB_SKILL.md):** a session is a Jupyter kernel on a rented VM,
+  kept alive by a **detached keep-alive daemon** that is independent of your shell.
+  `colab run` = `new`+`exec`+`stop`. With `--keep` (or via `colab new`), the VM persists
+  via the daemon. **Aborting your local command does NOT tear down an allocated,
+  kept session** — the daemon keeps it. (The only way a launch is lost is if you abort
+  *during* the `colab run`/`colab new` allocation itself, before the daemon takes over,
+  or the allocation fails — see below.)
+- **Allocation can fail transiently with `Service Unavailable`.** If `colab run`/`colab
+  new` errors at the `assign` step, just retry; it's usually transient quota/load. Don't
+  assume the run started. Verify with `colab status -s <name>` / `colab sessions`.
 - **If a run appears "stuck" on the monitor, it is the VM preparing.** The first
   ~2–4 minutes of every run are the VM cloning the repo, `pip install`ing, and
   building the feature matrix; `train_log.jsonl` does not exist yet, so the monitor
@@ -131,28 +136,40 @@ The monitor (`watch_progress.py`) is the live progress view. Two ways to use it:
 
 1. **Block to completion** (best when you can let it run):
    ```
-   .venv/bin/python watch_progress.py -s finjepa-aux05 --epochs 40
+   .venv/bin/python watch_progress.py -s finjepa-aux --epochs 40
    ```
    It prints a `[pre-training]` phase line (with elapsed time) during the VM's
    clone/install/feature-build, then a live `n/40 (pct%)` bar + metrics, then waits
-   for `probe.json` and exits. Do NOT abort — see §1.
+   for `probe.json` and exits.
 
-2. **Launch-and-return + on-demand polls** (preferred to avoid a 30-min block the
-   user might abort):
-   - Launch detached and return immediately (no blocking monitor in that command):
+2. **Launch-and-return + on-demand polls** (preferred to avoid a 30-min block):
+   - Launch detached and return immediately:
      ```
-     setsid stdbuf -oL -eL .colab-venv/bin/colab run --gpu T4 --session finjepa-aux05 \
+     setsid stdbuf -oL -eL .colab-venv/bin/colab run --gpu T4 --session finjepa-aux \
          --keep --timeout 5400 colab_run_train.py 40 2.0 0.5 \
-         < /dev/null > /tmp/colab_finjepa-aux05.log 2>&1 & disown
+         < /dev/null > /tmp/colab_finjepa-aux.log 2>&1 & disown
      echo launched
      ```
    - Check progress any time with a quick one-shot (returns in ~5s, shows the
-     percentage; safe-ish, but still: don't abort the LAUNCH command):
+     percentage):
      ```
-     .venv/bin/python watch_progress.py -s finjepa-aux05 --epochs 40 --once
+     .venv/bin/python watch_progress.py -s finjepa-aux --epochs 40 --once
      ```
    - When the `--once` poll shows `n == epochs`, download artifacts (§4) and stop
      the session (§1 housekeeping).
+
+**Resilient pattern (preferred when a run must not be lost):** allocate and run
+separately so an interrupted `exec` can't lose the VM:
+```
+colab new -s finjepa-aux --gpu T4          # allocates; daemon keeps it alive
+colab status -s finjepa-aux                # verify READY/BUSY
+colab exec -s finjepa-aux -f colab_run_train.py 40 2.0 0.5   # runs in the VM kernel
+```
+`colab exec` reattaches to the **same kernel** and only closes the websocket on exit —
+it does NOT shut the kernel down. So even if you abort the `exec` client, the training
+script keeps running on the VM; re-check with `watch_progress.py --once` / `colab
+download`. Debug a failed allocation/run with `colab log -s <name>` (raw errors live
+there), not by re-reading the launch chatter.
 
 **Rule of thumb:** if a command is going to block >~2 min, prefer the launch-and-return
 pattern and report progress via `--once` polls on request, rather than a long blocking
