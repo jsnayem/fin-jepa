@@ -118,7 +118,7 @@ class FinJEPA(nn.Module):
         B, T_ctx, F = ctx.shape
         z_ctx = self.encode_batch(ctx)
         z_pred = self.predictor(z_ctx)
-        output = {'emb': z_ctx}
+        output = {'emb': z_ctx, 'pred': z_pred}
 
         if tgt is not None:
             z_tgt = self.encode_batch(tgt)
