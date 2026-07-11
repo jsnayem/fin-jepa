@@ -155,7 +155,12 @@ class ForexH1Dataset(Dataset):
         i = self.starts[idx]
         ctx = self.feat[i - self.ctx:i]
         tgt = self.feat[i:i + self.tgt]
-        return {'ctx': torch.FloatTensor(ctx), 'tgt': torch.FloatTensor(tgt), 'start': i}
+        # Forward label: the mega-alpha `tgt` bars ahead (already z-scored), matching
+        # the probe's target. NaN when out of range (end of series).
+        y_idx = i + self.tgt
+        y = float(self.mega[y_idx]) if 0 <= y_idx < len(self.mega) else float('nan')
+        return {'ctx': torch.FloatTensor(ctx), 'tgt': torch.FloatTensor(tgt),
+                'start': i, 'y': y}
 
 
 def probe_pairs(self, tau, indices=None, batch=None):

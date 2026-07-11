@@ -103,13 +103,21 @@ class TransformerPredictor(nn.Module):
 # Full Fin-JEPA
 class FinJEPA(nn.Module):
     def __init__(self, n_features, embed_dim=64, encoder_layers=3, encoder_heads=3,
-                 predictor_layers=4, predictor_heads=4, sigreg_proj=512, sigreg_lambda=0.1):
+                 predictor_layers=4, predictor_heads=4, sigreg_proj=512, sigreg_lambda=0.1,
+                 aux_lambda=0.0):
         super().__init__()
         self.embed_dim = embed_dim
         self.sigreg_lambda = sigreg_lambda
+        self.aux_lambda = aux_lambda
         self.encoder = PriceEncoder(n_features, embed_dim, n_layers=encoder_layers, n_heads=encoder_heads)
         self.predictor = TransformerPredictor(embed_dim, predictor_layers, predictor_heads)
         self.sigreg = SIGReg(embed_dim, num_proj=sigreg_proj)
+        # Auxiliary return/label head — only instantiated when aux_lambda > 0 so the
+        # paper-faithful (aux_lambda=0) model is byte-identical to before. Predicts the
+        # forward mega-alpha label from the CONTEXT embedding mean (the same repr the
+        # downstream probe uses), forcing the encoder to make that label linearly
+        # decodable -> attacks probe_IC / dirAUC directly.
+        self.return_head = nn.Linear(embed_dim, 1) if aux_lambda and aux_lambda > 0 else None
 
     def encode_batch(self, seq):
         """seq: (B, T, F) → (B, T, D) per-timestep embeddings (batched)"""
@@ -150,6 +158,12 @@ class FinJEPA(nn.Module):
             sigreg_loss = self.sigreg(z_full.permute(1, 0, 2))
             output['sigreg_loss'] = sigreg_loss
             output['loss'] = pred_loss + self.sigreg_lambda * sigreg_loss
+            # Auxiliary label head: predict the forward mega-alpha from the context
+            # embedding mean. Gradient flows into the encoder, shaping latents to be
+            # linearly informative about forward returns (the probe's target).
+            if self.return_head is not None:
+                ctx_repr = z_ctx.mean(dim=1)                 # (B, D)
+                output['ret_pred'] = self.return_head(ctx_repr).squeeze(-1)  # (B,)
 
         return output
 

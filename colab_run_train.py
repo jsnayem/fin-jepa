@@ -16,6 +16,7 @@ REPO = "https://github.com/jsnayem/fin-jepa.git"
 EPOCHS = int(sys.argv[1]) if len(sys.argv) > 1 else 10
 BATCH = int(os.environ.get("FINJEPA_BATCH", "256"))
 LAMBDA = os.environ.get("FINJEPA_LAMBDA", sys.argv[2] if len(sys.argv) > 2 else "0.1")
+AUX = os.environ.get("FINJEPA_AUX", sys.argv[3] if len(sys.argv) > 3 else "0.0")
 CKPT = "checkpoints/forex_h1"
 
 
@@ -34,7 +35,7 @@ if __name__ == "__main__":
     resume = f"{CKPT}/last.pt" if os.path.exists(f"{CKPT}/last.pt") else None
     train_cmd = [sys.executable, "-u", "train_forex_h1.py",
                   "--epochs", str(EPOCHS), "--batch", str(BATCH),
-                  "--sigreg_lambda", LAMBDA,
+                  "--sigreg_lambda", LAMBDA, "--aux_lambda", AUX,
                   "--device", "cuda", "--ckpt", CKPT]
     if resume:
         train_cmd += ["--resume", resume]

@@ -46,9 +46,9 @@ def stdz(z):
     return float(x.std(0).mean())
 
 
-def evaluate(model, loader, device):
+def evaluate(model, loader, device, aux_lambda=0.0):
     model.eval()
-    tot = {'loss': 0., 'pred': 0., 'sig': 0.}
+    tot = {'loss': 0., 'pred': 0., 'sig': 0., 'aux': 0.}
     n = 0
     er_buf, sz_buf = [], []
     with torch.no_grad():
@@ -59,6 +59,11 @@ def evaluate(model, loader, device):
             tot['loss'] += float(out['loss']) * ctx.size(0)
             tot['pred'] += float(out['pred_loss']) * ctx.size(0)
             tot['sig'] += float(out['sigreg_loss']) * ctx.size(0)
+            if getattr(model, 'return_head', None) is not None and 'y' in b:
+                y = b['y'].to(device)
+                m = ~torch.isnan(y)
+                if m.any():
+                    tot['aux'] += float(F.mse_loss(out['ret_pred'][m], y[m])) * int(m.sum())
             er_buf.append(effective_rank(out['emb']))
             sz_buf.append(stdz(out['emb']))
             n += ctx.size(0)
@@ -80,6 +85,8 @@ def main():
     ap.add_argument('--heads', type=int, default=4)
     ap.add_argument('--sigreg_lambda', type=float, default=0.1)
     ap.add_argument('--sigreg_proj', type=int, default=512)
+    ap.add_argument('--aux_lambda', type=float, default=0.0,
+                    help='weight for auxiliary forward-label (mega-alpha) prediction head')
     ap.add_argument('--ckpt', default='checkpoints/forex_h1')
     ap.add_argument('--device', default='cpu')
     ap.add_argument('--workers', type=int, default=0)
@@ -110,6 +117,7 @@ def main():
         encoder_layers=args.enc_layers, encoder_heads=args.heads,
         predictor_layers=args.pred_layers, predictor_heads=args.heads,
         sigreg_proj=args.sigreg_proj, sigreg_lambda=args.sigreg_lambda,
+        aux_lambda=args.aux_lambda,
     ).to(device)
     n_params = sum(p.numel() for p in net.parameters())
     print('params:', f'{n_params:,}')
@@ -140,13 +148,21 @@ def main():
     for ep in range(start_epoch + 1, args.epochs + 1):
         net.train()
         t0 = time.time()
-        run = {'loss': 0., 'pred': 0., 'sig': 0.}
+        run = {'loss': 0., 'pred': 0., 'sig': 0., 'aux': 0.}
         steps = 0
         for it, b in enumerate(tr_loader, 1):
             ctx = b['ctx'].to(device)
             tgt = b['tgt'].to(device)
             out = net(ctx, tgt)
             loss = out['loss']
+            # Auxiliary forward-label loss (only if a return head is present).
+            if getattr(net, 'return_head', None) is not None and 'y' in b:
+                y = b['y'].to(device)
+                m = ~torch.isnan(y)
+                if m.any():
+                    ret_loss = F.mse_loss(out['ret_pred'][m], y[m])
+                    loss = loss + args.aux_lambda * ret_loss
+                    run['aux'] += float(ret_loss) * int(m.sum())
             opt.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
@@ -158,13 +174,14 @@ def main():
             if it % args.log_every == 0:
                 print(f'  ep{ep} it{it}/{len(tr_loader)} '
                       f'loss={run["loss"]/steps:.4f} '
-                      f'pred={run["pred"]/steps:.4f} sig={run["sig"]/steps:.4f}')
+                      f'pred={run["pred"]/steps:.4f} sig={run["sig"]/steps:.4f} '
+                      f'aux={run["aux"]/steps:.4f}')
         tr_loss = run['loss'] / steps
-        val, val_er, val_sz = evaluate(net, va_loader, device)
+        val, val_er, val_sz = evaluate(net, va_loader, device, aux_lambda=args.aux_lambda)
         dt = time.time() - t0
         print(f'ep{ep} [{dt:.0f}s] '
-              f'train loss={tr_loss:.4f}(pred={run["pred"]/steps:.4f},sig={run["sig"]/steps:.4f}) | '
-              f'val loss={val["loss"]:.4f}(pred={val["pred"]:.4f},sig={val["sig"]:.4f}) | '
+              f'train loss={tr_loss:.4f}(pred={run["pred"]/steps:.4f},sig={run["sig"]/steps:.4f},aux={run["aux"]/steps:.4f}) | '
+              f'val loss={val["loss"]:.4f}(pred={val["pred"]:.4f},sig={val["sig"]:.4f},aux={val["aux"]:.4f}) | '
               f'effR={val_er:.2f} stdZ={val_sz:.3f}')
 
         if val['loss'] < best_val:
@@ -187,7 +204,7 @@ def main():
             lf.write(json.dumps({
                 'epoch': ep, 'tr_loss': round(tr_loss, 5),
                 'val_loss': round(val['loss'], 5), 'val_pred': round(val['pred'], 5),
-                'val_sig': round(val['sig'], 5),
+                'val_sig': round(val['sig'], 5), 'val_aux': round(val['aux'], 5),
                 'eff_rank': round(val_er, 3), 'stdZ': round(val_sz, 4),
                 'best': bool(val['loss'] < best_val),
             }) + '\n')
