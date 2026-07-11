@@ -9,6 +9,7 @@ Resume / inspect:
 import argparse
 import json
 import os
+import random
 import time
 
 import numpy as np
@@ -69,7 +70,8 @@ def main():
     ap.add_argument('--data', default='data/EURUSD_H1.csv')
     ap.add_argument('--epochs', type=int, default=40)
     ap.add_argument('--batch', type=int, default=256)
-    ap.add_argument('--lr', type=float, default=3e-4)
+    ap.add_argument('--lr', type=float, default=1e-4)
+    ap.add_argument('--resume', default=None, help='path to last.pt to resume from')
     ap.add_argument('--ctx', type=int, default=ff.CTX)
     ap.add_argument('--tgt', type=int, default=ff.TGT)
     ap.add_argument('--embed_dim', type=int, default=64)
@@ -114,8 +116,24 @@ def main():
 
     opt = torch.optim.AdamW(net.parameters(), lr=args.lr, weight_decay=1e-4)
 
+    start_epoch = 0
+    if args.resume and os.path.isfile(args.resume):
+        ck = torch.load(args.resume, map_location=device, weights_only=False)
+        net.load_state_dict(ck['model_state'])
+        opt.load_state_dict(ck['optimizer_state'])
+        start_epoch = ck.get('epoch', 0)
+        # restore RNG states for reproducibility
+        if 'rng' in ck:
+            torch.set_rng_state(torch.from_numpy(ck['rng']['torch']))
+            np.random.set_state(ck['rng']['numpy'])
+            random.setstate(ck['rng']['random'])
+        # honor the (possibly new) LR on resume
+        for g in opt.param_groups:
+            g['lr'] = args.lr
+        print(f'resumed from {args.resume} at epoch {start_epoch}')
+
     best_val = float('inf')
-    for ep in range(1, args.epochs + 1):
+    for ep in range(start_epoch + 1, args.epochs + 1):
         net.train()
         t0 = time.time()
         run = {'loss': 0., 'pred': 0., 'sig': 0.}
@@ -155,6 +173,21 @@ def main():
             with open(os.path.join(args.ckpt, 'meta.json'), 'w') as f:
                 json.dump(meta, f, indent=2)
             print('  -> saved best')
+
+        # Always checkpoint the latest state so a stage can be resumed exactly.
+        torch.save({
+            'model_state': net.state_dict(),
+            'optimizer_state': opt.state_dict(),
+            'epoch': ep,
+            'rng': {
+                'torch': torch.get_rng_state().numpy(),
+                'numpy': np.random.get_state(),
+                'random': random.getstate(),
+            },
+            'args': vars(args),
+            'n_params': n_params,
+        }, os.path.join(args.ckpt, 'last.pt'))
+        print(f'  -> saved last.pt (epoch {ep})')
 
     print('done. best_val_loss=%.4f' % best_val)
 

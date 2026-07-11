@@ -88,12 +88,11 @@ def extract(net, ds, starts, tau, tgt, device, batch=512, repr_kind='mean'):
         y[~((y_idx >= 0) & (y_idx < len(ds.mega)))] = np.nan
         Ys.append(y.copy())
 
-        z_tgt = net.encode_batch(tgtw)
-        z_pred = out.get('pred', None)
-        if z_pred is None:
-            z_pred = net.predictor(z_ctx)
-        n = min(z_pred.size(1), z_tgt.size(1))
-        err = F.mse_loss(z_pred[:, :n], z_tgt[:, :n], reduction='none').mean((-1, -2)).cpu().numpy()
+        z_tgt = net.encode_batch(tgtw)  # (B, T_tgt, D) actual future latents
+        z_pred = out['pred']            # (B, T_ctx+T_tgt, D) joint prediction
+        # VoE: compare PREDICTED future latents vs actual target latents.
+        pred_future = z_pred[:, ctx.shape[1]:ctx.shape[1] + tgtw.shape[1]]
+        err = F.mse_loss(pred_future, z_tgt, reduction='none').mean((-1, -2)).cpu().numpy()
         Es.append(err)
     X = np.concatenate(Xs, 0)
     y = np.concatenate(Ys, 0)

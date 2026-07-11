@@ -9,7 +9,7 @@ from einops import rearrange
 
 # SIGReg — Sketched Isotropic Gaussian Regularizer
 class SIGReg(nn.Module):
-    def __init__(self, knots=17, num_proj=512):
+    def __init__(self, embed_dim, knots=17, num_proj=512):
         super().__init__()
         self.num_proj = num_proj
         t = torch.linspace(0, 3, knots, dtype=torch.float32)
@@ -20,13 +20,18 @@ class SIGReg(nn.Module):
         self.register_buffer("t", t)
         self.register_buffer("phi", window)
         self.register_buffer("weights", weights * window)
+        # Fixed random projection (sampled ONCE, not resampled every call) so the
+        # regularizer gradient is stable. Previously torch.randn each forward made
+        # the gradient noisy AND it was scaled by proj.size(-2) (~144x), dominating
+        # the loss. Both issues are fixed here.
+        g = torch.Generator().manual_seed(0)
+        A = torch.randn(embed_dim, num_proj, generator=g)
+        self.register_buffer("A", A.div_(A.norm(p=2, dim=0)))
 
     def forward(self, proj):
-        A = torch.randn(proj.size(-1), self.num_proj, device=proj.device)
-        A = A.div_(A.norm(p=2, dim=0))
-        x_t = (proj @ A).unsqueeze(-1) * self.t
+        x_t = (proj @ self.A).unsqueeze(-1) * self.t
         err = (x_t.cos().mean(-3) - self.phi).square() + x_t.sin().mean(-3).square()
-        statistic = (err @ self.weights) * proj.size(-2)
+        statistic = (err @ self.weights)  # no * proj.size(-2) scaling
         return statistic.mean()
 
 
@@ -104,7 +109,7 @@ class FinJEPA(nn.Module):
         self.sigreg_lambda = sigreg_lambda
         self.encoder = PriceEncoder(n_features, embed_dim, n_layers=encoder_layers, n_heads=encoder_heads)
         self.predictor = TransformerPredictor(embed_dim, predictor_layers, predictor_heads)
-        self.sigreg = SIGReg(num_proj=sigreg_proj)
+        self.sigreg = SIGReg(embed_dim, num_proj=sigreg_proj)
 
     def encode_batch(self, seq):
         """seq: (B, T, F) → (B, T, D) per-timestep embeddings (batched)"""
@@ -114,19 +119,24 @@ class FinJEPA(nn.Module):
         return z_all.reshape(B, T, -1)  # (B, T, D)
 
     def forward(self, ctx, tgt=None):
-        """ctx: (B, T, F), tgt: (B, pred, F) → dict with losses"""
-        B, T_ctx, F = ctx.shape
+        """ctx: (B, T_ctx, F), tgt: (B, T_tgt, F) → dict with losses.
+
+        JEPA objective: encode the JOINT context+target sequence and have the
+        causal predictor forecast the FUTURE latents (the target region), not the
+        same-timestep latent (in-painting). This is what makes the encoder learn
+        temporal structure.
+        """
         z_ctx = self.encode_batch(ctx)
-        z_pred = self.predictor(z_ctx)
-        output = {'emb': z_ctx, 'pred': z_pred}
+        output = {'emb': z_ctx}
 
         if tgt is not None:
-            z_tgt = self.encode_batch(tgt)
-            n_compare = min(T_ctx, tgt.shape[1])
-            pred_loss = torch.nn.functional.mse_loss(z_pred[:, :n_compare], z_tgt[:, :n_compare])
+            z_full = self.encode_batch(torch.cat([ctx, tgt], dim=1))  # (B, T_ctx+T_tgt, D)
+            z_pred = self.predictor(z_full)                            # (B, T_ctx+T_tgt, D)
+            output['pred'] = z_pred
+            T = ctx.shape[1]
+            pred_loss = torch.nn.functional.mse_loss(z_pred[:, T:], z_full[:, T:])
             output['pred_loss'] = pred_loss
-            full_emb = torch.cat([z_ctx, z_tgt], dim=1)
-            sigreg_loss = self.sigreg(full_emb.permute(1, 0, 2))
+            sigreg_loss = self.sigreg(z_full.permute(1, 0, 2))
             output['sigreg_loss'] = sigreg_loss
             output['loss'] = pred_loss + self.sigreg_lambda * sigreg_loss
 

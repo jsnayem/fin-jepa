@@ -163,3 +163,34 @@ Colab (see §7 for full flow). Smoke test that GPU is available:
   target, given SIGReg scaling makes λ=0.1 effectively huge? May need λ tuning.
 - Confirm `data/EURUSD_H1.csv` is the intended dataset (committed; 97,797 rows).
 - Decide whether to also stage/commit the `ctrader/*` deletions.
+
+---
+
+## 13. UPDATE — fixes applied + resumable staged training (this session)
+
+**Root causes from §9 are now FIXED in code (committed & pushed):**
+- `model.py` SIGReg: projection matrix `A` is now a **fixed buffer** (sampled once,
+  seeded) instead of `torch.randn` every call; removed the `* proj.size(-2)` (×144)
+  scaling. Effect: `val_sigreg_loss` dropped from ~20 to ~0.42 at init — stable.
+- `model.py` FinJEPA.forward: now encodes the **joint** `cat(ctx,tgt)` and predicts the
+  **future** latents (`pred_loss = mse(z_pred[:, T_ctx:], z_full[:, T_ctx:])`) instead
+  of same-timestep in-painting. True JEPA objective.
+- `probe_forex_h1.py`: VoE latent error now compares predicted-future vs actual target
+  latents (`z_pred[:, T_ctx:T_ctx+T_tgt]` vs `z_tgt`).
+- `train_forex_h1.py`: added `--resume`, LR default → `1e-4`, saves `last.pt` every
+  epoch (model + optimizer + RNG states) for exact resume.
+- `colab_run_train.py`: guards re-clone, resumes from `last.pt` if present, takes
+  cumulative `--epochs` from argv[1], runs training unbuffered (`-u`).
+
+**New training mode = resumable STAGED (10 epochs/stage), manual `last.pt`
+upload/download as the safety net, fixed model.**
+- Stage N launches `colab run --gpu T4 --session finjepa --keep --timeout 900 colab_run_train.py <N*10>`.
+- Same `--session finjepa` (persistent, `--keep`) reuses the VM so the repo + `last.pt`
+  survive; the wrapper resumes automatically.
+- After each stage: `colab download -s finjepa /content/fin-jepa/checkpoints/forex_h1/last.pt checkpoints/forex_h1/last.pt` (backup).
+- If the session is evicted: start a new one, `colab upload -s finjepa checkpoints/forex_h1/last.pt /content/fin-jepa/checkpoints/forex_h1/last.pt`, then `colab exec -s finjepa -f colab_run_train.py --timeout 900` (argv still the cumulative total) to resume.
+- Stopping rule: after each stage inspect `meta.json`; continue if `val_pred_loss`
+  falls and `val_sigreg_loss` stays bounded, else stop.
+
+**Status:** code fixes done & validated locally (forward shapes OK, resume mechanics
+OK). Colab Stage 1 (epochs 1–10) pending at time of writing — see latest `meta.json`.
