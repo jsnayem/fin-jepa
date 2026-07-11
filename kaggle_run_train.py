@@ -1,24 +1,31 @@
 """
-kaggle_run_train.py — executed INSIDE a Kaggle GPU notebook/kernel.
+kaggle_run_train.py — executed INSIDE a Kaggle GPU script kernel.
 
-Mirrors the proven colab_run_train.py flow but targets the RiskJEPA (risk-reward)
-data path:
-  - clones the fin-jepa repo (contains data/EURUSD_H1.csv + riskjepa/),
-  - pip installs einops (model.py imports it; Kaggle base image may lack it),
+Kaggle script kernels get NO reliable internet, so we do NOT `git clone` or
+`pip install`. The fin-jepa repo is attached as a **dataset**
+(`fin-jepa-train-bundle`, which contains the repo under `fin-jepa/`) and is
+mounted read-only at /kaggle/input/fin-jepa-train-bundle/fin-jepa. We copy it to
+/kaggle/working (writable), then run in-place.
+
+Pipeline (RiskJEPA risk-reward path):
   - trains riskjepa/train.py on GPU (sigreg_lambda=2.0, aux_lambda=0.5 — the
-    config that gave the best effective rank + a real (if modest) probe IC in the
-    latent-only sweep, retargeted now at the vol-normalized return label),
-  - runs the risk-reward probe + cost-aware backtest so the kernel log/OUTPUT
-    carries the real P&L verdict (profit factor, Sharpe, winrate, %-flat).
+    config with best effective rank + a real probe IC in the latent-only sweep,
+    retargeted now at the vol-normalized return label),
+  - runs riskjepa/probe.py (frozen-encoder) + the cost-aware risk-reward
+    backtest, so the kernel log/OUTPUT carries the real P&L verdict.
+  - copies artifacts to /kaggle/working (downloadable from the kernel).
 
-Artifacts are written to /kaggle/working/ (downloadable from the kernel) and the
-final verdict is printed as a JSON line for easy scraping.
+NOTE: model.py previously imported einops unnecessarily; that import is removed,
+so torch alone is required (present in the Kaggle PyTorch base image).
 """
 import os
+import shutil
 import subprocess
 import sys
 
-REPO = "https://github.com/jsnayem/fin-jepa.git"
+DATASET_MOUNT = "/kaggle/input/fin-jepa-train-bundle/fin-jepa"
+WORK = os.environ.get("KAGGLE_WORKING_DIR", "/kaggle/working")
+
 EPOCHS = int(os.environ.get("RJ_EPOCHS", "40"))
 BATCH = int(os.environ.get("RJ_BATCH", "256"))
 SIGREG = os.environ.get("RJ_SIGREG", "2.0")
@@ -26,7 +33,6 @@ AUX = os.environ.get("RJ_AUX", "0.5")
 TGT = os.environ.get("RJ_TGT", "12")
 CTX = os.environ.get("RJ_CTX", "48")
 SPREAD = os.environ.get("RJ_SPREAD", "0.10")   # round-turn cost (vol-normalized units)
-WORK = os.environ.get("KAGGLE_WORKING_DIR", "/kaggle/working")
 
 
 def sh(cmd, capture=False):
@@ -39,13 +45,19 @@ def sh(cmd, capture=False):
 
 
 if __name__ == "__main__":
-    # Kaggle drops the repo at /kaggle/working or we clone it.
-    here = os.getcwd()
-    if not os.path.isdir("fin-jepa"):
-        sh(f"git clone {REPO}")
-    os.chdir("fin-jepa")
+    # Locate the repo (dataset mount, or fall back to cwd if run locally/debug).
+    if os.path.isdir(DATASET_MOUNT):
+        repo = os.path.join(WORK, "fin-jepa")
+        if os.path.isdir(repo):
+            shutil.rmtree(repo)
+        shutil.copytree(DATASET_MOUNT, repo)
+        print(f">> copied dataset repo -> {repo}")
+    elif os.path.isdir("fin-jepa"):
+        repo = "fin-jepa"
+    else:
+        repo = os.getcwd()
+    os.chdir(repo)
 
-    sh(f"{sys.executable} -m pip install -q einops")
     sh(f"{sys.executable} -c \"import torch; print('CUDA', torch.cuda.is_available(), "
        f"torch.cuda.get_device_name(0) if torch.cuda.is_available() else '')\"")
 
@@ -80,6 +92,5 @@ if __name__ == "__main__":
     for f in ("best.pt", "last.pt", "meta.json", "probe.json", "train_log.jsonl"):
         src = os.path.join(ckpt_dir, f)
         if os.path.exists(src):
-            import shutil
             shutil.copy(src, os.path.join(WORK, f"riskjepa_{f}"))
     print("DONE. Artifacts in", WORK, "(riskjepa_best.pt, riskjepa_probe.json, ...)")

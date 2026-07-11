@@ -1,6 +1,6 @@
 {
   "id": "nayem939/fin-jepa-riskjepa-train",
-  "title": "Fin-JEPA RiskJEPA risk-reward pretrain (EUR/USD H1)",
+  "title": "Fin-JEPA RiskJEPA train",
   "code_file": "kaggle_run_train.py",
   "language": "python",
   "kernel_type": "script",
@@ -9,5 +9,5 @@
   "enable_internet": true,
   "dataset_sources": [],
   "competition_sources": [],
-  "keywords": ["forex", "self-supervised", "jepa", "time-series", "risk-reward"]
+  "keywords": ["forex", "time-series"]
 }

@@ -4,7 +4,6 @@ Fin-JEPA — adapted from LeWorldModel (Maes+ 2026) for financial time series.
 import math
 import torch
 import torch.nn as nn
-from einops import rearrange
 
 
 # SIGReg — Sketched Isotropic Gaussian Regularizer

@@ -97,9 +97,10 @@ def main():
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--log_every', type=int, default=50)
     args = ap.parse_args()
-
-    torch.manual_seed(args.seed)
-    np.random.seed(args.seed)
+    # Resolve to an absolute path so checkpoint saves are immune to cwd changes
+    # (the Kaggle wrapper chdir's into the repo; a background/remote launch may
+    # start elsewhere). torch.save does NOT create parent dirs, so ensure it exists.
+    args.ckpt = os.path.abspath(args.ckpt)
     os.makedirs(args.ckpt, exist_ok=True)
     device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
     print('device:', device, '| cuda_available=', torch.cuda.is_available())
@@ -185,6 +186,7 @@ def main():
 
         if val['loss'] < best_val:
             best_val = val['loss']
+            os.makedirs(args.ckpt, exist_ok=True)
             torch.save({'model_state': net.state_dict(), 'args': vars(args),
                         'n_params': n_params}, os.path.join(args.ckpt, 'best.pt'))
             meta = {'n_params': n_params, 'epoch': ep, 'best_val_loss': best_val,
@@ -205,6 +207,7 @@ def main():
                 'best': bool(val['loss'] < best_val),
             }) + '\n')
 
+        os.makedirs(args.ckpt, exist_ok=True)
         torch.save({
             'model_state': net.state_dict(),
             'optimizer_state': opt.state_dict(),
