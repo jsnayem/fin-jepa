@@ -1,0 +1,10 @@
+{"epoch": 1, "tr_loss": 0.57702, "val_loss": 0.23845, "val_pred": 0.22031, "val_sig": 0.18133, "eff_rank": 5.442, "stdZ": 1.0, "best": false}
+{"epoch": 2, "tr_loss": 0.10846, "val_loss": 0.06287, "val_pred": 0.03948, "val_sig": 0.23388, "eff_rank": 3.805, "stdZ": 0.9997, "best": false}
+{"epoch": 3, "tr_loss": 0.03904, "val_loss": 0.04459, "val_pred": 0.02273, "val_sig": 0.21864, "eff_rank": 3.924, "stdZ": 0.9999, "best": false}
+{"epoch": 4, "tr_loss": 0.0309, "val_loss": 0.0391, "val_pred": 0.0191, "val_sig": 0.20004, "eff_rank": 4.24, "stdZ": 1.0, "best": false}
+{"epoch": 5, "tr_loss": 0.02736, "val_loss": 0.03495, "val_pred": 0.01662, "val_sig": 0.18332, "eff_rank": 4.555, "stdZ": 1.0001, "best": false}
+{"epoch": 6, "tr_loss": 0.02475, "val_loss": 0.03054, "val_pred": 0.01372, "val_sig": 0.16818, "eff_rank": 4.779, "stdZ": 1.0002, "best": false}
+{"epoch": 7, "tr_loss": 0.02265, "val_loss": 0.02753, "val_pred": 0.01203, "val_sig": 0.15498, "eff_rank": 4.963, "stdZ": 1.0002, "best": false}
+{"epoch": 8, "tr_loss": 0.02087, "val_loss": 0.02444, "val_pred": 0.01013, "val_sig": 0.14304, "eff_rank": 5.134, "stdZ": 1.0002, "best": false}
+{"epoch": 9, "tr_loss": 0.01932, "val_loss": 0.02269, "val_pred": 0.00941, "val_sig": 0.1328, "eff_rank": 5.244, "stdZ": 1.0002, "best": false}
+{"epoch": 10, "tr_loss": 0.01798, "val_loss": 0.02033, "val_pred": 0.00792, "val_sig": 0.12413, "eff_rank": 5.327, "stdZ": 1.0002, "best": false}

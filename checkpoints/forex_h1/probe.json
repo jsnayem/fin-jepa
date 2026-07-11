@@ -1,0 +1,15 @@
+{
+  "ckpt": "checkpoints/forex_h1/best.pt",
+  "tau": 24,
+  "repr": "mean",
+  "probe": "mlp",
+  "n_train": 27251,
+  "n_val": 3238,
+  "probe_IC": -0.004786295650606228,
+  "probe_rankIC": -0.03399071393828003,
+  "probe_R2": -0.006981891662446671,
+  "probe_dirAUC": 0.46936185911510203,
+  "VoE_alpha_label_IC": 0.016163659035843755,
+  "VoE_alpha_label_AUC": 0.5175163258496592,
+  "VoE_rawdir_AUC": 0.5143018114800278
+}

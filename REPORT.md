@@ -166,31 +166,96 @@ Colab (see §7 for full flow). Smoke test that GPU is available:
 
 ---
 
-## 13. UPDATE — fixes applied + resumable staged training (this session)
+## 13. UPDATE — fixes applied + resumable staged training
 
-**Root causes from §9 are now FIXED in code (committed & pushed):**
+**Root causes from §9 are FIXED in code (committed & pushed):**
 - `model.py` SIGReg: projection matrix `A` is now a **fixed buffer** (sampled once,
   seeded) instead of `torch.randn` every call; removed the `* proj.size(-2)` (×144)
-  scaling. Effect: `val_sigreg_loss` dropped from ~20 to ~0.42 at init — stable.
-- `model.py` FinJEPA.forward: now encodes the **joint** `cat(ctx,tgt)` and predicts the
+  scaling → `val_sigreg_loss` dropped from ~20 to ~0.42 at init (stable).
+- `model.py` FinJEPA.forward: encodes the **joint** `cat(ctx,tgt)` and predicts the
   **future** latents (`pred_loss = mse(z_pred[:, T_ctx:], z_full[:, T_ctx:])`) instead
-  of same-timestep in-painting. True JEPA objective.
+  of same-timestep in-painting. True JEPA objective. Exposes `z_tgt` (standardized
+  target latents) for consistent VoE.
 - `probe_forex_h1.py`: VoE latent error now compares predicted-future vs actual target
-  latents (`z_pred[:, T_ctx:T_ctx+T_tgt]` vs `z_tgt`).
+  latents in the SAME (standardized) space.
 - `train_forex_h1.py`: added `--resume`, LR default → `1e-4`, saves `last.pt` every
-  epoch (model + optimizer + RNG states) for exact resume.
-- `colab_run_train.py`: guards re-clone, resumes from `last.pt` if present, takes
-  cumulative `--epochs` from argv[1], runs training unbuffered (`-u`).
+  epoch (model + optimizer + RNG states); writes `train_log.jsonl` per-epoch.
 
-**New training mode = resumable STAGED (10 epochs/stage), manual `last.pt`
-upload/download as the safety net, fixed model.**
-- Stage N launches `colab run --gpu T4 --session finjepa --keep --timeout 900 colab_run_train.py <N*10>`.
-- Same `--session finjepa` (persistent, `--keep`) reuses the VM so the repo + `last.pt`
-  survive; the wrapper resumes automatically.
-- After each stage: `colab download -s finjepa /content/fin-jepa/checkpoints/forex_h1/last.pt checkpoints/forex_h1/last.pt` (backup).
-- If the session is evicted: start a new one, `colab upload -s finjepa checkpoints/forex_h1/last.pt /content/fin-jepa/checkpoints/forex_h1/last.pt`, then `colab exec -s finjepa -f colab_run_train.py --timeout 900` (argv still the cumulative total) to resume.
-- Stopping rule: after each stage inspect `meta.json`; continue if `val_pred_loss`
-  falls and `val_sigreg_loss` stays bounded, else stop.
+**Second fix — EMBEDDING COLLAPSE (committed `6c52f13`):** after §9 fixes, Stage 1
+still collapsed: `stdZ` → 0.008 because SIGReg only enforces *isotropy*, not *scale*
+(the model shrinks latents to a tiny ball and gets `pred_loss`≈0 for free). Fix: in
+`FinJEPA.forward`, **hard-standardize** `z_full` to zero-mean/unit-variance per feature
+(over the batch) before SIGReg + pred-loss. This structurally forbids collapse. Dropped
+the weak soft `var_beta` penalty. After fix `stdZ` ≈ 1.0 (healthy).
 
-**Status:** code fixes done & validated locally (forward shapes OK, resume mechanics
-OK). Colab Stage 1 (epochs 1–10) pending at time of writing — see latest `meta.json`.
+**Staged training flow (CORRECTED — no `upload` command exists in this CLI):**
+- `colab run --keep` can be issued **once** per session. A second `colab run` on the
+  same kept session fails with `TooManyAssignmentsError` (Google rejects re-assign).
+- There is **NO `colab upload`**. To continue past Stage 1 you must reuse the **kept
+  VM's own `last.pt`** via `colab exec -f <local_script.py>` (exec uploads+runs a LOCAL
+  file on the live VM; cwd is `/content`, repo at `/content/fin-jepa`).
+- `colab exec` does **not** stream long-running subprocess output. Launch training
+  **detached**, redirect to a log, then poll with `colab download`:
+  ```
+  # local /tmp/stage2.py:
+  import os, sys, subprocess
+  os.chdir("/content/fin-jepa")
+  subprocess.Popen([sys.executable, "-u", "colab_run_train.py", "10"],
+                   stdout=open("stage2.log","w"), stderr=subprocess.STDOUT)
+  ```
+  `colab exec -s finjepa -f /tmp/stage2.py --timeout 60`  → then
+  `colab download -s finjepa /content/fin-jepa/checkpoints/forex_h1/train_log.jsonl .`
+- **If the kept session is evicted/lost** (happens on `stop` or idle timeout): the VM
+  `last.pt` is gone and cannot be re-uploaded. The ONLY recovery is the **local**
+  `checkpoints/forex_h1/last.pt` backup — but it also can't be uploaded, so you must
+  **re-run Stage 1 fresh** (`colab run --keep colab_run_train.py 10`) and continue via
+  `exec`. Lesson: treat local `checkpoints/forex_h1/*.pt` as the durable backup; the
+  staged plan's "upload" step is impossible with this CLI.
+
+## 14. RESULTS — Stage 1 (epochs 1–10), post-collapse-fix (commit `6c52f13`)
+
+Training is now **healthy** (collapse gone):
+```
+epoch  tr_loss  val_loss  val_pred  val_sig  eff_rank  stdZ
+1       0.577    0.238     0.220     0.181    5.44      1.000
+5       0.027    0.035     0.0167    0.183    4.55      1.000
+10      0.018    0.0203    0.0079    0.124    5.33      1.000
+best_val_loss 0.0203; val_eff_rank 5.33/64; val_stdZ 1.000
+```
+- `stdZ` stable ≈ 1.0 (no collapse). `val_pred_loss` 0.22 → 0.008 (learns future latents).
+- `val_eff_rank` stays **low (~5/64)** — embeddings are isotropic but occupy a low-dim
+  subspace; SIGReg (λ=0.1) is not spreading dimensionality.
+- **Probe still ~noise** (best.pt): `probe_IC -0.0048`, `probe_rankIC -0.034`,
+  `probe_dirAUC 0.469`; `VoE_alpha_label_IC 0.016`, `VoE_alpha_label_AUC 0.518`,
+  `VoE_rawdir_AUC 0.514`. No tradable downstream signal at 10 epochs.
+
+## 15. WRAP-UP (end of session — progress saved)
+
+**Done & pushed:** CSV/feature/alpha/model plumbing; §9 divergence fixes (fb557ab);
+hard-standardization collapse fix (6c52f13); latent-only JEPA runs cleanly on Colab T4.
+**Done locally (backed up, NOT committed):** Stage-1 artifacts in `checkpoints/forex_h1/`
+(`last.pt` 4.6MB, `best.pt`, `meta.json`, `probe.json`, `train_log.jsonl`). Weights are
+gitignored (`*.pt`); the JSON logs are small evidence files.
+
+**Paused at:** 10 / 40 epochs. Colab session `finjepa` **terminated** (GPU freed). Local
+Stage-1 backups intact.
+
+**Open / next session:**
+1. Resume to 40 epochs via the corrected flow (§13): fresh `colab run --keep
+   colab_run_train.py 10` (Stage 1 again, ~2 min), then `colab exec -f` stages 2–4 with
+   the detached-logging pattern, polling `train_log.jsonl`. Re-evaluate probe IC.
+2. If probe IC stays ~0 at 40 epochs, the likely culprit is **low effective rank
+   (~5/64)**: raise `sigreg_lambda` (e.g. 0.5–1.0) to force wider/richer latents, or
+   accept that a latent-only JEPA on FX may not encode forward returns (consistent with
+   the paper's own VoE finding in §2.6). Also try a longer context/horizon or a
+   return-prediction auxiliary loss.
+3. Consider committing the small JSON result files (`meta.json`, `probe.json`,
+   `train_log.jsonl`) as evidence; keep `*.pt` out of git.
+
+**How to resume quickly next time:**
+```
+.colab-venv/bin/colab run --gpu T4 --session finjepa --keep --timeout 1200 colab_run_train.py 10
+# then for each further 10-epoch stage, exec the detached logger (§13) and poll:
+.colab-venv/bin/colab download -s finjepa /content/fin-jepa/checkpoints/forex_h1/train_log.jsonl .
+.colab-venv/bin/colab download -s finjepa /content/fin-jepa/checkpoints/forex_h1/probe.json .
+```
