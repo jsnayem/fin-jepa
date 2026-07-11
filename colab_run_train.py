@@ -10,7 +10,7 @@ import subprocess
 import sys
 
 REPO = "https://github.com/jsnayem/fin-jepa.git"
-EPOCHS = int(os.environ.get("FINJEPA_EPOCHS", "3"))
+EPOCHS = int(os.environ.get("FINJEPA_EPOCHS", "40"))
 BATCH = int(os.environ.get("FINJEPA_BATCH", "256"))
 
 

@@ -142,7 +142,7 @@ def main():
         dt = time.time() - t0
         print(f'ep{ep} [{dt:.0f}s] '
               f'train loss={tr_loss:.4f}(pred={run["pred"]/steps:.4f},sig={run["sig"]/steps:.4f}) | '
-              f'val loss={val["loss"]:.4f}(pred={val["pred"]:.4f}) | '
+              f'val loss={val["loss"]:.4f}(pred={val["pred"]:.4f},sig={val["sig"]:.4f}) | '
               f'effR={val_er:.2f} stdZ={val_sz:.3f}')
 
         if val['loss'] < best_val:
@@ -150,6 +150,7 @@ def main():
             torch.save({'model_state': net.state_dict(), 'args': vars(args),
                         'n_params': n_params}, os.path.join(args.ckpt, 'best.pt'))
             meta = {'n_params': n_params, 'epoch': ep, 'best_val_loss': best_val,
+                    'val_pred_loss': val['pred'], 'val_sigreg_loss': val['sig'],
                     'val_eff_rank': val_er, 'val_stdZ': val_sz, **vars(args)}
             with open(os.path.join(args.ckpt, 'meta.json'), 'w') as f:
                 json.dump(meta, f, indent=2)
