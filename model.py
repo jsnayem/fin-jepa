@@ -103,10 +103,12 @@ class TransformerPredictor(nn.Module):
 # Full Fin-JEPA
 class FinJEPA(nn.Module):
     def __init__(self, n_features, embed_dim=64, encoder_layers=3, encoder_heads=3,
-                 predictor_layers=4, predictor_heads=4, sigreg_proj=512, sigreg_lambda=0.1):
+                 predictor_layers=4, predictor_heads=4, sigreg_proj=512, sigreg_lambda=0.1,
+                 var_beta=0.1):
         super().__init__()
         self.embed_dim = embed_dim
         self.sigreg_lambda = sigreg_lambda
+        self.var_beta = var_beta
         self.encoder = PriceEncoder(n_features, embed_dim, n_layers=encoder_layers, n_heads=encoder_heads)
         self.predictor = TransformerPredictor(embed_dim, predictor_layers, predictor_heads)
         self.sigreg = SIGReg(embed_dim, num_proj=sigreg_proj)
@@ -138,7 +140,14 @@ class FinJEPA(nn.Module):
             output['pred_loss'] = pred_loss
             sigreg_loss = self.sigreg(z_full.permute(1, 0, 2))
             output['sigreg_loss'] = sigreg_loss
-            output['loss'] = pred_loss + self.sigreg_lambda * sigreg_loss
+            # Variance/scale regularizer: SIGReg only enforces isotropy, so the
+            # embeddings can collapse to a tiny ball (pred_loss~0 trivially). Force
+            # per-feature variance toward 1 so the representation stays informative.
+            fv = z_full.var(dim=(0, 1))            # per-feature variance over (B, T)
+            var_loss = (fv - 1.0).pow(2).mean()
+            output['var_loss'] = var_loss
+            output['loss'] = (pred_loss + self.sigreg_lambda * sigreg_loss
+                              + self.var_beta * var_loss)
 
         return output
 
