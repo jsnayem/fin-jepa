@@ -40,8 +40,8 @@ def main():
     prev = 0
     while True:
         if not download(args.session, REMOTE_LOG, args.dest):
-            print(f"[poll] download failed (session busy? sleeping {args.interval}s)",
-                  file=sys.stderr)
+            print(f"[poll] train_log.jsonl not ready yet (VM cloning/installing, or "
+                  f"session busy) — sleeping {args.interval}s", file=sys.stderr)
             time.sleep(args.interval)
             continue
 

@@ -95,6 +95,13 @@
   noise no matter how long you train. Fix dimensionality (λ) before adding epochs.
 - **`--timeout` default is 30s** in this CLI and WILL kill your run. Always pass
   `--timeout 5400` (or ≥ training time).
+- **Never commit run-output JSONs (`meta.json`/`probe.json`/`train_log.jsonl`) into
+  the repo.** A fresh Colab clone starts with them, and (a) the live monitor reads a
+  stale 40-line `train_log.jsonl` and falsely reports "100% done" before training
+  even starts, and (b) you download last run's `probe.json` thinking it's new. Fix:
+  gitignore `checkpoints/**/*.json` and open `train_log.jsonl` with **truncate** on
+  epoch 1 (was append → polluted files). Also: if the monitor says 100% suspiciously
+  fast, the run hasn't actually finished — check `colab status -s <name>` for BUSY.
 
 ### 🧪 Open questions / next levers
 - Optimal λ for this data: 1.0 clearly beats 0.1; sweep {0.5, 2.0} to find the peak
@@ -111,5 +118,13 @@
 | date | session | λ | epochs | eff_rank | probe_IC | probe_dirAUC | notes |
 |---|---|---|---|---|---|---|---|
 | 2026-07-11 | finjepa | 0.1 | 40 | 5.67 | 0.011 | 0.482 | baseline; low-rank bottleneck |
+| 2026-07-11 | finjepa-l05 | 0.5 | 40 | 11.37 | 0.041 | 0.507 | rank climbs with λ |
 | 2026-07-11 | finjepa-l1 | 1.0 | 40 | 12.28 | 0.045 | 0.505 | λ fix works; signal emerges |
+| 2026-07-11 | finjepa-l2 | 2.0 | 40 | 14.77 | 0.052 | 0.502 | best IC; dirAUC still ~0.50 |
 | | | | | | | | |
+
+**Sweep read-out:** `probe_IC` and `val_eff_rank` rise monotonically with λ
+(0.1→2.0). `best_val_loss` also rises (0.011→0.045) — expected, since higher λ
+trades `pred` fidelity for isotropy. `probe_dirAUC` stays ~0.50–0.51 across all λ,
+i.e. rank correlation (IC) is real but **directional** hit-rate is still chance.
+Next lever if we want dirAUC>0.52: return-prediction aux loss, or longer horizon.

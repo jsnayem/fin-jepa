@@ -342,4 +342,30 @@ peak, run λ∈{0.5, 2.0} (each its own `--session`, stop the prior first). Trac
 otherwise accept the λ=1.0 signal and move to a return-prediction auxiliary loss /
 longer horizon as the next lever (per §16).
 
+### λ sweep results (all 40 ep, T4)
+| λ | val_eff_rank | best_val_loss | probe_IC | probe_rankIC | probe_dirAUC |
+|---|---|---|---|---|---|
+| 0.1 | 5.67 | 0.0106 | 0.011 | −0.012 | 0.482 |
+| 0.5 | 11.37 | 0.0216 | 0.041 | +0.035 | 0.507 |
+| 1.0 | 12.28 | 0.0301 | 0.045 | +0.023 | 0.505 |
+| 2.0 | 14.77 | 0.0447 | 0.052 | +0.027 | 0.502 |
+
+`eff_rank` and `probe_IC` rise **monotonically** with λ. `best_val_loss` also rises
+(higher λ trades `pred` fidelity for isotropy — expected). `probe_dirAUC` stays
+~0.50–0.51 at every λ: rank correlation is real but **directional** hit-rate is still
+chance. Artifacts in `checkpoints/forex_h1{_l05,_l1,_l2}/`.
+
+**Bug hit during sweep — clone pollution (FIXED):** `meta.json`/`probe.json`/
+`train_log.jsonl` were committed, so every fresh Colab clone shipped the λ=0.1 copies.
+`train_log.jsonl` was also opened in *append* mode, so a new run added to the stale 40
+lines. The live monitor then read the stale 40-line file and falsely reported "100%
+done" before λ=2.0 even started, and we first downloaded the old `probe.json`. Fixes
+(committed): gitignore `checkpoints/**/*.json`; `train_forex_h1.py` now **truncates**
+`train_log.jsonl` on epoch 1. Lesson: if the monitor ever shows 100% implausibly fast,
+verify with `colab status -s <name>` (must be BUSY while training).
+
+**Next lever (dirAUC still ~0.50):** add a return-prediction auxiliary loss, or try a
+longer context/horizon (CTX/TGT), or a richer encoder. λ is now doing its job
+(spreading rank); the remaining gap is directional, not dimensional.
+
 
