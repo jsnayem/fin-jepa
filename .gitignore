@@ -13,3 +13,7 @@ output/results/
 output/results/
 
 .commandcode/
+# run-output evidence (kept locally, not in repo — they poison fresh Colab clones)
+checkpoints/**/meta.json
+checkpoints/**/probe.json
+checkpoints/**/train_log.jsonl

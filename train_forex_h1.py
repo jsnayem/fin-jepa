@@ -178,9 +178,12 @@ def main():
                 json.dump(meta, f, indent=2)
             print('  -> saved best')
 
-        # Append a per-epoch line so staged runs can be monitored even though the
-        # Colab client does not stream subprocess stdout.
-        with open(os.path.join(args.ckpt, 'train_log.jsonl'), 'a') as lf:
+        # Write a per-epoch line (truncate so a fresh run doesn't append to a stale
+        # file left in the repo / checkpoint dir). The Colab client polls this file
+        # for live progress since subprocess stdout is block-buffered.
+        log_path = os.path.join(args.ckpt, 'train_log.jsonl')
+        mode = 'w' if ep == 1 else 'a'
+        with open(log_path, mode) as lf:
             lf.write(json.dumps({
                 'epoch': ep, 'tr_loss': round(tr_loss, 5),
                 'val_loss': round(val['loss'], 5), 'val_pred': round(val['pred'], 5),
