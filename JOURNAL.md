@@ -102,6 +102,21 @@
   gitignore `checkpoints/**/*.json` and open `train_log.jsonl` with **truncate** on
   epoch 1 (was append → polluted files). Also: if the monitor says 100% suspiciously
   fast, the run hasn't actually finished — check `colab status -s <name>` for BUSY.
+- **Label dtype:** numpy labels are float64 → DataLoader collates to Double, which
+  makes an aux MSE loss float64 while the model is float32 and `backward()` dies with
+  "Found dtype Double but expected Float". Always cast labels to `float32`.
+- **`colab exec -f script.py` does NOT forward extra argv** — it errors on them and
+  the run never starts. Use `colab run script.py args...` (forwards argv) or bake args
+  into the script. `colab run` = `new`+`exec`+`stop`.
+- **GPU (T4) can return `Service Unavailable` (503)** at allocation — transient
+  backend/quota, not our bug. Retry; or fall back to **CPU** (`colab run` without
+  `--gpu`). CPU Colab RAM is small: the run **OOM-killed (SIGKILL)** at batch 256 →
+  use batch 64 (or smaller). CPU is ~30× slower than T4, so only use it for smoke
+  tests, not full 40-epoch runs.
+- **Session model (COLAB_SKILL.md):** a session is a Jupyter kernel kept alive by a
+  detached daemon, independent of your shell. `--keep` persists it. Aborting *during*
+  allocation cancels; once allocated, the daemon keeps it and aborting a `colab exec`
+  client does NOT stop the kernel. Debug failures with `colab log -s <name>`.
 
 ### 🧪 Open questions / next levers
 - Optimal λ for this data: 1.0 clearly beats 0.1; sweep {0.5, 2.0} to find the peak
@@ -111,6 +126,51 @@
   auxiliary loss, or a longer context/horizon.
 - Consider committing the small JSON evidence files (`meta.json`, `probe.json`,
   `train_log.jsonl`) per run; keep `*.pt` out of git.
+
+### 2026-07-11 — Session E: auxiliary-label head + Colab ops schooling
+- **Added the aux head** to attack the directional gap: `FinJEPA.return_head`
+  (`nn.Linear(D,1)`, only when `aux_lambda>0`) predicts the forward mega-alpha from
+  the context-embedding mean (the same repr the probe uses). Training combines
+  `loss = jepa_loss + aux_lambda·mse(ret_pred, y)`. Code committed; baselines
+  (aux=0) byte-identical.
+- **Bug #5 — Double/Float dtype crash.** First Colab aux run died with
+  `RuntimeError: Found dtype Double but expected Float` at `backward()`. The label `y`
+  is numpy float64 → collated to Double → aux loss became float64 while the model is
+  float32. Fix: cast `y` to `float32`, detach `ret_loss` for logging. A 1-epoch local
+  CPU run would have caught this instantly — add that as a pre-flight smoke test.
+- **Bug #6 — wrapper swallowed the traceback.** `subprocess.run(check=True)` raised
+  `CalledProcessError` and hid the real error. Fix: wrapper now writes training output
+  to `train_run.log` on the VM and always dumps it.
+- **Bug #7 — `colab exec -f script.py` doesn't forward argv.** A launch
+  `colab exec ... colab_run_train.py 10 2.0 0.5` errored on the extra args, so the run
+  never started (kernel stayed IDLE). `colab run` forwards argv; use that, or bake args
+  into a script.
+- **Colab environment schooling (user added `COLAB_SKILL.md`):** a session is a
+  Jupyter kernel kept alive by a **detached daemon** — independent of the local shell.
+  `colab run` = `new`+`exec`+`stop`; `--keep` persists it. **GPU (T4) allocation threw
+  `Service Unavailable` (503)** repeatedly (transient); fell back to **CPU**. On CPU
+  the run **OOM-killed (SIGKILL)** at batch 256 → relaunched batch 64 (added `argv[4]`
+  batch to the wrapper) and it ran, but CPU is ~30× slower (epoch 1 >26 min). The aux
+  experiment is **blocked on GPU**, not failed — code is ready.
+- **Monitor improved:** `watch_progress.py` is now phase-aware (shows the
+  clone/install/feature-build phase + elapsed time, not "stuck") and has `--once` for
+  quick on-demand polls. SOP updated to match the accurate session model + new+exec
+  resilient pattern + `colab log` debugging.
+
+## 5. Future plan (next sessions)
+1. **P0 — finish the aux-label experiment on GPU/T4** (retry the 503; it's transient):
+   `colab run --gpu T4 --session finjepa-aux05 --keep --timeout 5400 \
+    colab_run_train.py 40 2.0 0.5`, monitor, download to `checkpoints/forex_h1_aux05/`.
+   Success = `probe_dirAUC > 0.52`. If still flat: sweep `aux_lambda`∈{1.0,2.0}, or
+   predict raw forward return, or lengthen `TGT`/`CTX`.
+2. **P1 — pre-flight smoke test:** run `train_forex_h1.py --epochs 1 --aux_lambda 0.5`
+   locally (tiny batch) before every Colab launch, to catch dtype/crash bugs fast.
+   Also make the probe step in the wrapper non-fatal.
+3. **P2 — if directional gap persists:** return-aux on longer horizon; richer encoder;
+   accept paper §2.6 (latent-only FX may not encode forward direction — the aux head
+   is the direct test).
+4. **P3 — docs/housekeeping:** keep JOURNAL/REPORT/SOP current; stop Colab sessions
+   when done (one assignment per account).
 
 ---
 

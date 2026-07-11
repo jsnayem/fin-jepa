@@ -390,4 +390,65 @@ and logs `val_aux`. `best_val` still uses the JEPA loss only (faithful selection
 crosses ~0.52, the aux head is the missing lever; if not, try `aux_lambda`∈{1.0, 2.0}
 or a longer horizon.
 
+**Status (2026-07-11) — experiment code is READY, the run is BLOCKED (not failed):**
+- Aux head implemented & committed (`model.FinJEPA.return_head`, only when
+  `aux_lambda>0` so paper-faithful baselines are untouched). `forex_features` adds the
+  forward mega-alpha label `y`; `train_forex_h1.py` adds `--aux_lambda` and combines
+  `loss = jepa_loss + aux_lambda·mse(ret_pred, y)` (NaN-masked). `colab_run_train.py`
+  forwards `aux_lambda` (argv[3]) and `batch` (argv[4]).
+- **Bugs hit & fixed while attempting the run:**
+  1. `RuntimeError: Found dtype Double but expected Float` — the label `y` arrived
+     as float64 (numpy), so the aux loss became float64 while the model is float32
+     and `backward()` died. Fixed: cast `y` to `float32` and detach `ret_loss` for
+     logging. Committed.
+  2. The wrapper swallowed the training traceback (`subprocess.run(check=True)`
+     raised `CalledProcessError`, hiding the real error). Fixed: wrapper now writes
+     training output to `train_run.log` on the VM and always dumps it. Committed.
+  3. **`colab exec -f script.py` does NOT forward extra argv** — a launch
+     `colab exec ... colab_run_train.py 10 2.0 0.5` errored on `10 2.0 0.5`, so the
+     run never started. Use `colab run` (forwards argv) or bake args into a script.
+- **Colab environment learnings (see `COLAB_SKILL.md`, added this session):**
+  - A session is a Jupyter kernel kept alive by a **detached daemon**, independent of
+    the local shell. `colab run` = `new`+`exec`+`stop`. With `--keep` the VM persists.
+  - **GPU (T4) allocation returned `Service Unavailable` (503)** repeatedly — a
+    transient backend/quota issue, not our code. Fallback: **CPU** (`colab run`
+    without `--gpu`).
+  - On **CPU the run OOM-killed (SIGKILL)** at batch 256 (Colab CPU RAM is small).
+    Relaunched with batch 64 (added `argv[4]` batch to the wrapper) — it started
+    (BUSY) but CPU is ~30× slower (epoch 1 not done in ~26 min). A 10–40 ep CPU run
+    is impractical; **the aux experiment needs GPU**.
+- **Net:** code is correct and ready; re-run on T4 the moment allocation succeeds.
+
+## 19. FUTURE PLAN (next sessions)
+
+**P0 — Complete the auxiliary-label experiment (needs GPU/T4):**
+- Retry T4 allocation (the 503 is transient; retry a few times). When it works, run
+  `colab run --gpu T4 --session finjepa-aux05 --keep --timeout 5400 \
+   colab_run_train.py 40 2.0 0.5` (λ=2.0, aux=0.5, 40 ep), monitor with
+  `watch_progress.py -s finjepa-aux05 --epochs 40`, download to
+  `checkpoints/forex_h1_aux05/`.
+- Compare vs λ=2.0 baseline (dirAUC 0.502, IC 0.052). **Success = dirAUC > ~0.52.**
+- If directional signal still flat: sweep `aux_lambda`∈{1.0, 2.0}; or predict the
+  **raw forward return** instead of (or in addition to) the mega-alpha; or lengthen
+  the horizon `TGT` (and `CTX`).
+
+**P1 — Cheap guardrails so Colab runs stop failing silently:**
+- Add a **local CPU smoke test**: `train_forex_h1.py --epochs 1 --aux_lambda 0.5`
+  runs in `.venv` and would have caught the dtype bug in seconds (do this before
+  every Colab launch). (Note: a 1-ep CPU run of the full model is slow but a tiny
+  subset / `--batch 64` makes it feasible.)
+- Make the probe step in `colab_run_train.py` non-fatal (so a probe crash doesn't
+  lose the trained `best.pt`).
+
+**P2 — If the directional gap persists after aux loss:**
+- Return-prediction auxiliary on a *longer* horizon; richer encoder (more layers /
+  wider D, re-check param count stays reasonable); multi-scale / volume-aware features.
+- Revisit the paper's own VoE finding (§2.6): latent-only JEPA on FX may inherently
+  not encode forward *direction* — the aux head is the direct test of that.
+
+**P3 — Housekeeping / docs:**
+- Keep `JOURNAL.md` ledger + `REPORT.md` state current; `SOP.md` is the runbook.
+- Commit small JSON evidence per run (currently gitignored to avoid clone pollution).
+- Stop Colab sessions when done (one assignment per account).
+
 
