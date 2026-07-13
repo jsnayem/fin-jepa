@@ -2,7 +2,7 @@
 # Sweep sigreg_lambda values, monitoring each live via watch_progress.py.
 # Stops the prior session before each launch (one Colab assignment per account).
 set -u
-cd /home/nayem/Projects/jepa/fin-jepa
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 run_sweep() {
   local LAM=$1 SES=$2 DESTDIR=$3

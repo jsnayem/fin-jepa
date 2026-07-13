@@ -58,7 +58,7 @@
 
 ## 2. Launch a training run
 ```bash
-cd /home/nayem/Projects/jepa/fin-jepa
+cd "$(git rev-parse --show-toplevel)"
 # stop any prior session first (one assignment per account)
 .colab-venv/bin/colab stop -s finjepa-l1 2>/dev/null || true
 # launch detached so the local command returns; poll via watch_progress.py

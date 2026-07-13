@@ -78,7 +78,7 @@ layers, heads=4, SIGReg λ=0.1). Latent-only (no price output head).
   only the first time.
 - Launch training (detached so the local command returns; poll the log):
   ```
-  cd /home/nayem/Projects/jepa/fin-jepa
+  cd "$(git rev-parse --show-toplevel)"
   setsid stdbuf -oL -eL .colab-venv/bin/colab run --gpu T4 --session finjepa-train \
       --keep --timeout 5400 colab_run_train.py < /dev/null > /tmp/colab_train.log 2>&1 & disown
   ```

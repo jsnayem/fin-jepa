@@ -1,6 +1,6 @@
 # Fin-JEPA Architecture & Training Improvement Proposal
 
-*Scope: concrete fixes to `/home/nayem/Projects/jepa/fin-jepa` grounded in the canonical JEPA family (I-JEPA, V-JEPA, LeWM, BYOL/EMA teachers) and the repo's own legacy code.*
+*Scope: concrete fixes to the **fin-jepa** repo (this directory), grounded in the canonical JEPA family (I-JEPA, V-JEPA, LeWM, BYOL/EMA teachers) and the repo's own legacy code.*
 
 ## 1. JEPA core principles (what keeps it stable)
 

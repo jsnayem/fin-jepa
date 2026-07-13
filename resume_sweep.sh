@@ -2,7 +2,7 @@
 # Resume sweep: λ=0.5 is already running (finjepa-l05). Monitor it, download,
 # then run λ=2.0 (stopping l05 first — one Colab assignment per account).
 set -u
-cd /home/nayem/Projects/jepa/fin-jepa
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 monitor_and_fetch() {
   local SES=$1 DESTDIR=$2
